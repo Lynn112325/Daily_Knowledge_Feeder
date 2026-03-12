@@ -11,6 +11,25 @@ const turndownService = new TurndownService({
 });
 
 /**
+ * Custom rule to handle 'Compact Links'.
+ * Identifies <a> tags that contain <img> elements and collapses them 
+ * into a single-line Markdown format to prevent Turndown from 
+ * inserting unwanted newlines or block-level breaks.
+ */
+turndownService.addRule('compactLinks', {
+    // Matches <a> tags that have an <img> as a child
+    filter: (node) => {
+        return node.nodeName === 'A' && node.querySelector('img');
+    },
+    replacement: function (content, node) {
+        const href = node.getAttribute('href');
+        // Strip newlines and extra spaces to keep the Markdown link on one line
+        const cleanContent = content.replace(/\n/g, '').trim();
+        return `[${cleanContent}](${href})`;
+    }
+});
+
+/**
  * Core scraping engine
  * @param {string} url - Target article URL
  * @param {Object} strategy - Website-specific parsing strategy
