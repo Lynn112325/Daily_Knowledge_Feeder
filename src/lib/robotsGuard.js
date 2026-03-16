@@ -1,15 +1,14 @@
 const axios = require('axios');
 const robotsParser = require('robots-parser');
 const chalk = require('chalk');
-const globalConfig = require('./global');
 
 /**
  * Validates crawling permission for a specific URL based on robots.txt.
  * Handles User-agent, Allow/Disallow, and Crawl-delay rules.
- * * @param {string} targetUrl - The specific page URL to check.
+ * @param {string} targetUrl - The specific page URL to check.
  * @param {string} userAgent - Your bot's name (defaults to '*' for all bots).
  */
-async function isAllowed(targetUrl) {
+async function isAllowed(targetUrl, userAgent) {
     try {
         const urlObj = new URL(targetUrl);
         // robots.txt must always be located at the root of the domain
@@ -20,7 +19,7 @@ async function isAllowed(targetUrl) {
         // 1. Fetch robots.txt with a timeout and a descriptive User-Agent
         const response = await axios.get(robotsUrl, {
             timeout: 5000,
-            headers: { 'User-Agent': globalConfig.USER_AGENT }
+            headers: { 'User-Agent': userAgent }
         }).catch(err => err.response); // Capture error response for status check
 
         // 2. Handle missing robots.txt (404)
