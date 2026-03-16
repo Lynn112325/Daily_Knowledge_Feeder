@@ -7,11 +7,11 @@ const chalk = require('chalk');
  */
 function saveToMarkdown(article) {
     // 1. Setup output directory
-    const outputDir = path.join(__dirname, '../../output');
+    const category = path.join(article.mainCategory, '/', article.category);
+    const outputDir = path.join(__dirname, '../../output', category);
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
-
     // 2. Filename cleaning
     const safeFileName = article.title
         .replace(/[\\/:\*\?"<>|]/g, '')
@@ -28,6 +28,7 @@ function saveToMarkdown(article) {
         `author: "${escapeYaml(article.author)}"`,
         `image: "${article.image}"`,
         `url: "${article.fullUrl}"`,
+        `Category: ${category}`,
         'tags:',
         ...(article.keywords || []).map(tag => `  - "${tag}"`),
         '---'
@@ -39,6 +40,7 @@ function saveToMarkdown(article) {
         `**Date:** ${article.date}`,
         `**Author:** ${article.author}`,
         `**Source:** [Original Article](${article.fullUrl})`,
+        `**Category:** ${category}`,
         `**Tags:** ${(article.keywords || []).map(tag => `#${tag.replace(/\s+/g, '')}`).join(' ')}`
     ].join('\n\n');
 
