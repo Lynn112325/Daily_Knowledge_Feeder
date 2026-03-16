@@ -1,3 +1,5 @@
+const globalConfig = require('./global');
+
 /**
  * Source Factory: Converts raw data into a standardized list of scraping tasks.
  * @param {Object} strategy - Shared logic for how to crawl the site.
@@ -27,7 +29,7 @@ function createStandardConfig({ strategy, categoryMap, baseUrl, prefix = 'SD' })
     return {
         strategy,
         sources,
-        userAgent: 'KnowledgeFeederBot/1.0'
+        userAgent: globalConfig.USER_AGENT
     };
 }
 
