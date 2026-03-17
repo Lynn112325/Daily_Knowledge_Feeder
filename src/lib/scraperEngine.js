@@ -3,6 +3,8 @@ const cheerio = require('cheerio');
 const chalk = require('chalk');
 const TurndownService = require('turndown');
 
+// --- Turndown Configuration ---
+// Converts HTML to clean Markdown
 const turndownService = new TurndownService({
     headingStyle: 'atx',
     hr: '---',
@@ -11,51 +13,66 @@ const turndownService = new TurndownService({
 });
 
 /**
- * Custom rule to handle 'Compact Links'.
- * Identifies <a> tags that contain <img> elements and collapses them 
- * into a single-line Markdown format to prevent Turndown from 
- * inserting unwanted newlines or block-level breaks.
+ * Rule: compactLinks
+ * Collapses <a> tags containing <img> into a single line to prevent 
+ * Turndown from inserting unwanted block breaks.
  */
 turndownService.addRule('compactLinks', {
-    // Matches <a> tags that have an <img> as a child
-    filter: (node) => {
-        return node.nodeName === 'A' && node.querySelector('img');
-    },
+    filter: (node) => node.nodeName === 'A' && node.querySelector('img'),
     replacement: function (content, node) {
         const href = node.getAttribute('href');
-        // Strip newlines and extra spaces to keep the Markdown link on one line
         const cleanContent = content.replace(/\n/g, '').trim();
         return `[${cleanContent}](${href})`;
     }
 });
 
 /**
- * Core scraping engine
- * @param {string} url - Target article URL
- * @param {Object} strategy - Website-specific parsing strategy
+ * Rule: fixBoldTitles
+ * Detects bold text acting as a header (e.g., a single bold line in a <p>)
+ * and converts it into a Markdown H3 (###).
  */
-async function scrapeArticle(url, strategy) {
+turndownService.addRule('fixBoldTitles', {
+    filter: (node) => {
+        const isBold = node.nodeName === 'STRONG' || node.nodeName === 'B';
+        const isShort = node.textContent.length < 100;
+        // Check if the bold tag is the only child of a paragraph
+        const isBlockLike = node.parentNode.nodeName === 'P' && node.parentNode.childNodes.length === 1;
+
+        return isBold && isShort && isBlockLike;
+    },
+    replacement: function (content) {
+        return `\n\n### ${content.trim()}\n\n`;
+    }
+});
+
+/**
+ * Core Scraper Engine
+ * @param {string} url - Target URL to scrape
+ * @param {Object} strategy - Website-specific parsing logic
+ * @param {string} userAgent - Browser identity string for request
+ */
+async function scrapeArticle(url, strategy, userAgent) {
     try {
-        // Fetch page data with a basic User-Agent
-        const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        // 1. Fetch Web Page: Use axios with a custom User-Agent
+        const { data } = await axios.get(url, { headers: { 'User-Agent': userAgent } });
         const $ = cheerio.load(data);
 
-        // 1. Execute strategy: Use the strategy module to parse the DOM
+        // 2. Extract Data: Run the site-specific strategy
         console.log(chalk.blue(`Executing strategy: ${strategy.name}...`));
         const extractedData = strategy.extract($);
 
-        // 2. Conversion: Turn raw HTML content into Markdown
+        // 3. HTML to Markdown: Convert the main content body
         let markdownContent = 'Content not found.';
         if (extractedData.rawHtmlContent) {
             markdownContent = turndownService.turndown(extractedData.rawHtmlContent);
         }
 
-        // 3. Assemble final object
+        // 4. Clean Up: Assemble final object and release raw HTML memory
         return {
             ...extractedData,
             content: markdownContent,
             fullUrl: url,
-            rawHtmlContent: undefined // Remove raw HTML to save memory
+            rawHtmlContent: undefined
         };
 
     } catch (error) {
