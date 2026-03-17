@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Vditor Markdown Learning Tool</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vditor/dist/index.css" />
+  <script src="https://cdn.jsdelivr.net/npm/vditor/dist/index.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 20px;
+      box-sizing: border-box;
+      background: #f9fafb;
+    }
+
+    #vditor {
+      flex: 1;
+    }
+  </style>
+</head>
+
+<body>
+
+  <nav class="breadcrumb">
+    <a class="breadcrumb-item" href="#">Main</a>
+    <a class="breadcrumb-item" href="#">Sub</a>
+    <a class="breadcrumb-item active" aria-current="page">Active</a>
+  </nav>
+
+  <div id="vditor"></div>
+  <div id="tooltip"></div>
+
+  <script>
+    const tooltip = document.getElementById('tooltip');
+
+    // 1. Get the Markdown text from Express
+    const initialContent = <%- JSON.stringify(initialMarkdown) %>;
+
+    // 2. Get the Unique ID from Express
+    const currentArticleId = <%- JSON.stringify(articleId) %>;
+
+    const vditor = new Vditor('vditor', {
+      height: '100%',
+      mode: 'ir',
+      value: initialContent,
+      placeholder: 'Loading contents...',
+      theme: 'classic',
+      counter: {
+        enable: true
+      },
+      preview: {
+        markdown: {
+          mark: true,
+          toc: true,
+          footnotes: true,
+        }
+      },
+      cache: {
+        enable: true,
+        id: `vditor-${currentArticleId}`,
+      },
+      toolbarConfig: {
+        pin: true,
+      },
+      toolbar: [
+        "emoji",
+        "headings",
+        "bold",
+        "italic",
+        "strike",
+        "link",
+        {
+          name: 'highlight',
+          tip: 'highlight',
+          hotkey: "⌘H",
+          tipPosition: "ne",
+          icon: '<svg viewBox="0 0 1024 1024"><path d="M793.8 131.2L157.6 767.4l-26.4 125.4 125.4-26.4L892.8 230.2l-99-99z"></path></svg>',
+          click(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            // 1. Get selected text
+            const selectedText = vditor.getSelection();
+            if (!selectedText) return;
+
+            // 2. Get full markdown content
+            const fullMarkdown = vditor.getValue();
+
+            // 3. Define the wrapped pattern
+            const wrappedPattern = `==${selectedText}==`;
+
+            // 4. Toggle highlight logic
+            if (fullMarkdown.includes(wrappedPattern)) {
+              // Remove tags: delete selection and insert plain text
+              vditor.deleteValue();
+              vditor.insertValue(selectedText);
+            } else {
+              // Add tags: wrap selection with ==
+              vditor.updateValue(`==${selectedText}==`);
+            }
+          }
+        },
+        '|',
+        "list",
+        "ordered-list",
+        "check",
+        "outdent",
+        "indent",
+        "|",
+        "quote",
+        "line",
+        "code",
+        "inline-code",
+        "insert-before",
+        "insert-after",
+        "|",
+        "table",
+        'export',
+        "|",
+        "undo",
+        "redo",
+        "|",
+        "fullscreen",
+        {
+          name: "more",
+          toolbar: [
+            "outline",
+            "preview",
+            "devtools",
+            "info",
+            "help",
+          ],
+        },
+      ],
+      after: () => {
+        console.log("vditor ready.");
+      }
+    });
+
+    // Dictionary logic: listen for mouseup inside Vditor
+    document.getElementById('vditor').addEventListener('mouseup', async (e) => {
+      const selection = window.getSelection().toString().trim();
+
+      // Only search for English words (at least 2 letters)
+      if (selection && /^[a-zA-Z]{2,}$/.test(selection)) {
+        const response = await fetch(`/api/dictionary/${selection}`);
+        const data = await response.json();
+
+        if (data.success) {
+          const dict = data.data;
+          tooltip.innerHTML = `
+                        <b style="color:#fbbf24; font-size:16px;">${dict.word}</b>
+                        <div style="font-size:12px; color:#9ca3af; margin:5px 0;">Collins: ${dict.collins}★</div>
+                        <div style="font-size:13px; line-height:1.4;">${dict.translation.replace(/\n/g, '<br>')}</div>
+                    `;
+          tooltip.style.left = e.clientX + 10 + 'px';
+          tooltip.style.top = e.clientY + 10 + 'px';
+          tooltip.style.display = 'block';
+        }
+      }
+    });
+
+    // Close tooltip when clicking elsewhere
+    document.addEventListener('mousedown', (e) => {
+      if (!tooltip.contains(e.target)) tooltip.style.display = 'none';
+    });
+  </script>
+</body>
+
+</html>
