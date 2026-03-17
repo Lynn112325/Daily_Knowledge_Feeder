@@ -42,7 +42,7 @@ async function runTasks() {
                 await sleep(waitTime);
 
                 // C. Crawl: Extract full article details
-                const detail = await scrapeArticle(url, task.strategy);
+                const detail = await scrapeArticle(url, task.strategy, globalConfig.USER_AGENT);
 
                 if (detail) {
                     // D. Metadata Injection: Add category info from task for folder organization
