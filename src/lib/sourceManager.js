@@ -1,36 +1,50 @@
-// src/lib/sourceManager.js
+const axios = require('axios');
+const cheerio = require('cheerio');
+const chalk = require('chalk');
 const Source = require('../models/Source');
+const { isAllowed } = require('../lib/robotsGuard');
+
+// Helper to pause execution
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Synchronizes website categories from a strategy into the MongoDB database.
- * @param {Object} strategy - The site-specific strategy (e.g., scienceDaily).
- * @param {String} userAgent - Browser identifier for the HTTP request.
  */
 async function syncCategories(strategy, userAgent) {
-    console.log(`🔍 Discovering latest categories for: ${strategy.name}...`);
+    console.log(chalk.blue(`🔍 Initiating discovery for: ${strategy.name}...`));
 
     try {
-        // 1. Execute the discovery logic defined in the strategy file
-        const discoveredSources = await strategy.discover(userAgent);
+        // 1. Compliance: Check robots.txt permissions
+        const { allowed, crawlDelay } = await isAllowed(strategy.listConfig.baseUrl, userAgent);
+
+        if (!allowed) {
+            console.log(chalk.red(`🚫 Access denied by robots.txt: ${strategy.listConfig.baseUrl}`));
+            return;
+        }
+
+        // 2. Action: Fetch HTML (The Manager handles networking)
+        const { data } = await axios.get(strategy.listConfig.baseUrl, {
+            headers: { 'User-Agent': userAgent }
+        });
+        const $ = cheerio.load(data);
+
+        // 3. Rules: Use the Strategy to parse the HTML (Pure logic)
+        const discoveredSources = strategy.discoverRules($);
 
         let newCount = 0;
         let updateCount = 0;
 
-        // 2. Iterate through each discovered category path
-        for (const data of discoveredSources) {
+        // 4. Database Persistence (Upsert)
+        for (const sourceData of discoveredSources) {
+            // Ensure baseUrl is present (fallback to strategy config)
+            if (!sourceData.baseUrl) sourceData.baseUrl = strategy.listConfig.baseUrl;
 
-            // Double-check: ensure baseUrl is present to avoid 'null' in DB
-            if (!data.baseUrl) data.baseUrl = strategy.baseUrl;
-
-            // 3. Perform an "Upsert" (Update if exists, Insert if new)
-            // We identify uniqueness by combining baseUrl and the specific path
             const result = await Source.updateOne(
-                { baseUrl: data.baseUrl, path: data.path }, // Search criteria
-                { $set: data },                             // Data to write
-                { upsert: true }                            // Create if not found
+                { baseUrl: sourceData.baseUrl, path: sourceData.path },
+                { $set: sourceData },
+                { upsert: true }
             );
 
-            // 4. Track statistics for the console output
             if (result.upsertedCount > 0) {
                 newCount++;
             } else if (result.modifiedCount > 0) {
@@ -38,12 +52,12 @@ async function syncCategories(strategy, userAgent) {
             }
         }
 
-        console.log(`✅ ${strategy.name} sync complete!`);
+        console.log(chalk.green(`✅ ${strategy.name} sync complete!`));
         console.log(`   - New categories added: ${newCount}`);
         console.log(`   - Existing categories updated: ${updateCount}`);
 
     } catch (error) {
-        console.error(`❌ Error syncing categories for ${strategy.name}:`, error.message);
+        console.error(chalk.red(`❌ Error syncing categories for ${strategy.name}:`), error.message);
     }
 }
 
