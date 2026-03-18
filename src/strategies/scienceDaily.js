@@ -16,59 +16,33 @@ const scienceDailyStrategy = {
         limit: 3                    // Only process 3 articles for testing
     },
 
-    /**
-         * Discover all news categories from the website navigation menu.
-         */
-    async discover(userAgent) {
-        // Map to store unique sources and prevent duplicates
+    // Rules for the source table
+    discoverRules($) {
         const uniqueSourcesMap = new Map();
-
-        // List of menu labels we want to ignore
         const EXCLUDED_LABELS = new Set(['Home Page', 'Top Science News', 'Latest News', 'more topics', 'Top News']);
 
-        // Fetch the HTML from the website's base URL
-        const { data } = await axios.get(this.listConfig.baseUrl, {
-            headers: { 'User-Agent': userAgent }
-        });
-
-        // Load the HTML into Cheerio for easy selection
-        const $ = cheerio.load(data);
-
-        // Loop through each dropdown menu in the navigation bar
         $('.nav.navbar-nav > li.dropdown').each((_, dropdown) => {
-            // Get the text of the main menu item (e.g., 'Health', 'Tech')
             const mainCategory = $(dropdown).find('> a.dropdown-toggle').text().trim();
-
-            // Skip the menu if it's empty or the 'Home' section
             if (!mainCategory || mainCategory === 'Home') return;
 
-            // Loop through each sub-category link inside the dropdown
             $(dropdown).find('a[role="menuitem"]').each((_, item) => {
-                // Get the sub-category name and its URL path
                 const name = $(item).text().trim() || '';
                 const relativeUrl = $(item).attr('href');
 
-                // Filter: Only keep valid news paths and skip excluded labels
                 if (!relativeUrl || !relativeUrl.startsWith('/news/') || EXCLUDED_LABELS.has(name) || name === '') return;
 
-                const fullPath = relativeUrl;
-
-                // If this path is new, add it to our map
-                if (!uniqueSourcesMap.has(fullPath)) {
-                    uniqueSourcesMap.set(fullPath, {
+                if (!uniqueSourcesMap.has(relativeUrl)) {
+                    uniqueSourcesMap.set(relativeUrl, {
                         siteName: this.name,
                         baseUrl: this.listConfig.baseUrl,
                         strategyKey: this.strategyKey,
-                        path: fullPath,
-                        // Construct the display category (e.g., "/Health/Allergy")
-                        categoryPath: `/${mainCategory}/${name}`.replace(/\s+/g, ' ').trim(),
+                        path: relativeUrl,
+                        category: `/${mainCategory}/${name}`.replace(/\s+/g, ' ').trim(),
                         isActive: true
                     });
                 }
             });
         });
-
-        // Convert the Map into an Array to return the results
         return Array.from(uniqueSourcesMap.values());
     },
 
