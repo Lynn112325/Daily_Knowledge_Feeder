@@ -15,3 +15,5 @@ build/Release
 node_modules/
 jspm_packages/
 src/data/stardict.db
+
+*.env
