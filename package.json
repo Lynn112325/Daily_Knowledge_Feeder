@@ -20,7 +20,7 @@
     "ejs": "^5.0.1",
     "express": "^5.2.1",
     "he": "^1.2.0",
-    "mongoose": "^9.2.4",
+    "mongoose": "^9.3.1",
     "robots-parser": "^3.0.1",
     "turndown": "^7.2.2"
   },
