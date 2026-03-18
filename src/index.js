@@ -27,7 +27,7 @@ async function runTasks() {
 
         try {
             // 2. Fetch the list of article URLs using the site-specific strategy
-            const urlList = await getList(task.listUrl, task.strategy.listConfig);
+            const urlList = await getList(task.listUrl, task.strategy.listConfig, globalConfig.USER_AGENT);
 
             for (const url of urlList) {
                 // A. Compliance: Check robots.txt permissions

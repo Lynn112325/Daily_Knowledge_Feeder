@@ -8,11 +8,12 @@ const chalk = require('chalk');
  * Generic list scraper
  * @param {string} listUrl - URL of the listing page
  * @param {Object} config - Selectors defined in strategy (container, linkSelector, baseUrl)
+ * @param {string} userAgent
  */
-async function getList(listUrl, config) {
+async function getList(listUrl, config, userAgent) {
     try {
         const { data } = await axios.get(listUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'User-Agent': userAgent }
         });
         const $ = cheerio.load(data);
         const urlList = [];
