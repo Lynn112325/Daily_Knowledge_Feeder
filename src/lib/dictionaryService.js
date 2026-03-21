@@ -36,7 +36,7 @@ const sd = new StarDict(path.join(__dirname, '../data/stardict.db'));
 /**
  * Core Logic: Determines if a word needs an annotation based on difficulty
  */
-function getHardWordAnnotation(word) {
+async function getHardWordAnnotation(word) {
     let cleanWord = word.toLowerCase();
     if (cleanWord.length < 5) return null; // Skip short words
 
@@ -98,13 +98,13 @@ function getHardWordAnnotation(word) {
         shouldAnnotate = true;  // Mark difficult or academic words
     }
 
-    return (shouldAnnotate && res.translation) ? getCleanTranslation(res.translation) : null;
+    return (shouldAnnotate && res.translation) ? await getCleanTranslation(res.translation) : null;
 }
 
 /**
  * Helper: Extracts clean, concise Chinese definitions
  */
-function getCleanTranslation(translation) {
+async function getCleanTranslation(translation) {
     if (!translation) return null;
 
     // Get the first line and remove content inside brackets
@@ -122,14 +122,35 @@ function getCleanTranslation(translation) {
     return meanings || null;
 }
 
+
 /**
- * Processor: Adds inline annotations to Markdown text
+ * Processes Markdown text to add inline Chinese annotations for difficult English words.
+ * Uses a batch-processing approach to handle asynchronous dictionary lookups efficiently.
  */
-function annotateMarkdown(text) {
-    // Match English words (4+ characters)
-    return text.replace(/\b[a-zA-Z]{4,}\b/g, (word) => {
-        const annotation = getHardWordAnnotation(word);
-        return annotation ? `${word} ==(${annotation})==` : word;
+async function annotateMarkdown(text) {
+    // 1. Guard clause: Return early if text is empty
+    if (!text) return text;
+
+    // 2. Extraction: Identify unique English words (3+ characters) to avoid redundant lookups
+    const words = Array.from(new Set(text.match(/\b[a-zA-Z]{3,}\b/g) || []));
+
+    // 3. Storage: Initialize a Map to store word-to-translation pairs
+    const annotationMap = new Map();
+
+    // 4. Batch Processing: Run all dictionary queries in parallel for high performance
+    await Promise.all(words.map(async (word) => {
+        const annotation = await getHardWordAnnotation(word);
+        if (annotation) {
+            // Only store if the word meets the difficulty criteria and has a translation
+            annotationMap.set(word, annotation);
+        }
+    }));
+
+    // 5. Transformation: Replace words with "Word ==(Translation)==" format using the Map
+    return text.replace(/\b[a-zA-Z]{3,}\b/g, (word) => {
+        const ann = annotationMap.get(word);
+        // If an annotation exists in our Map, wrap it; otherwise, return the original word
+        return ann ? `${word} ==(${ann})==` : word;
     });
 }
 
