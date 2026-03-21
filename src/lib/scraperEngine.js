@@ -71,8 +71,7 @@ async function scrapeArticle(url, strategy, userAgent) {
         return {
             ...extractedData,
             content: markdownContent,
-            fullUrl: url,
-            rawHtmlContent: undefined
+            originalUrl: url,
         };
 
     } catch (error) {
