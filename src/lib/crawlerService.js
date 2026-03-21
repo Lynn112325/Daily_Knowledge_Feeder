@@ -1,3 +1,17 @@
+const chalk = require('chalk');
+const { scrapeArticle } = require('./scraperEngine');
+const { isAllowed } = require('./robotsGuard');
+const { getList } = require('./listFetcher');
+const globalConfig = require('../config/global');
+const STRATEGIES = require('../config/strategies');
+const { saveToDatabase } = require('./articleService');
+
+// Models
+const Source = require('../models/Source');
+const Task = require('../models/Task');
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Core Crawler Engine: Manages the background execution of scraping tasks and DB updates.
  * @param {Array} sourceIds - List of database IDs for categories to scrape.
@@ -29,12 +43,32 @@ async function runCrawlerEngine(sourceIds, limitPerCategory, taskId) {
 
             // 3. Construct the full target URL and fetch the list of article links
             const fullListUrl = new URL(source.path, source.baseUrl).href;
-            const urlList = await getList(fullListUrl, limitPerCategory, currentStrategy.listConfig, globalConfig.USER_AGENT);
 
-            if (!urlList || urlList.length === 0) {
-                console.log(chalk.yellow(`⚠️ No articles found.`));
-                continue;
+            // 1. 抓取該列表頁【所有的】文章 URL (假設有 50 筆)
+            const allPageUrls = await getList(fullListUrl, currentStrategy.listConfig, globalConfig.USER_AGENT);
+
+            if (!allPageUrls || allPageUrls.length === 0) {
+                console.log(chalk.yellow(`⚠️ No articles found in this category.`));
+                continue; // 跳到下一個 source
             }
+
+            // 2. 🚀 核心過濾邏輯：去資料庫比對這批 URL
+            // 找出資料庫中已經包含的 URL (只取 originalUrl 欄位以節省記憶體)
+            const existingArticles = await Article.find({
+                originalUrl: { $in: allPageUrls }
+            }).select('originalUrl');
+
+            // 將已存在的 URL 轉成 Set，查詢速度最快 O(1)
+            const existingUrlSet = new Set(existingArticles.map(a => a.originalUrl));
+
+            // 3. 過濾出「真正全新」的 URL
+            const newUrls = allPageUrls.filter(url => !existingUrlSet.has(url));
+
+            console.log(chalk.gray(`Page has ${allPageUrls.length} links. Found ${newUrls.length} NEW links.`));
+
+            // 4. 最後才套用使用者的限制數量 (Limit)
+            const targetUrls = newUrls.slice(0, limitPerCategory);
+            console.log(chalk.cyan(`Will scrape exactly ${targetUrls.length} new articles.`));
 
             // 4. Iterate through each article link
             for (const url of urlList.slice(0, limitPerCategory)) {
@@ -94,3 +128,4 @@ async function runCrawlerEngine(sourceIds, limitPerCategory, taskId) {
         console.error(chalk.bgRed.white(' CRITICAL ERROR '), criticalError.stack);
     }
 }
+module.exports = { runCrawlerEngine };

@@ -24,9 +24,9 @@ async function saveToDatabase(articleData) {
             title: articleData.title,
             author: articleData.author || "Unknown",
             originalDate: articleData.date,
-            originalUrl: articleData.fullUrl,
+            originalUrl: articleData.originalUrl,
             // Format category path (e.g., /Health/Allergy)
-            category: `/${articleData.mainCategory}/${articleData.category}`.replace(/\/+/g, '/'),
+            category: articleData.category,
             tags: articleData.keywords || [],
             content: annotatedContent,
             summary: articleData.summary,
