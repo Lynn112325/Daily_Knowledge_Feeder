@@ -10,7 +10,7 @@ const chalk = require('chalk');
  * @param {Object} config - Selectors defined in strategy (container, linkSelector, baseUrl)
  * @param {string} userAgent
  */
-async function getList(listUrl, config, userAgent) {
+async function getList(listUrl, limit, config, userAgent) {
     try {
         const { data } = await axios.get(listUrl, {
             headers: { 'User-Agent': userAgent }
@@ -21,7 +21,7 @@ async function getList(listUrl, config, userAgent) {
         // Find elements using the strategy's selectors
         $(config.container).each((i, el) => {
             // Apply limit to prevent excessive scraping during testing/MVP
-            if (config.limit && i >= config.limit) return false;
+            if (limit && i >= limit) return false;
 
             const href = $(el).find(config.linkSelector).attr('href');
             if (href) {
