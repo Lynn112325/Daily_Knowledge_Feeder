@@ -3,17 +3,17 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 // Strategy for ScienceDaily - Defines how to find and extract data
-const EXCLUDED_LABELS = new Set(['Home Page', 'Top Science News', 'Latest News', 'more topics', 'Top News']);
 const scienceDailyStrategy = {
     name: 'ScienceDaily',
     domain: 'sciencedaily.com',
+    strategyKey: 'scienceDaily',
 
     // Rules for the LIST page (Where the links are)
     listConfig: {
         container: '.latest-head',   // Each article entry block
         linkSelector: 'a',          // The link inside the block
         baseUrl: 'https://www.sciencedaily.com',
-        limit: 3                    // Only process 3 articles for testing
+        limit: null
     },
 
     // Rules for the source table
