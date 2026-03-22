@@ -1,5 +1,3 @@
-// Fetches HTML and extracts full article URLs into an array based on strategy rules.
-
 const axios = require('axios');
 const cheerio = require('cheerio');
 const chalk = require('chalk');
@@ -10,32 +8,90 @@ const chalk = require('chalk');
  * @param {Object} config - Selectors defined in strategy (container, linkSelector, baseUrl)
  * @param {string} userAgent
  */
-async function getList(listUrl, limit, config, userAgent) {
+async function getList(listUrl, config, userAgent) {
     try {
+        // 1. Execute the HTTP GET request
         const { data } = await axios.get(listUrl, {
-            headers: { 'User-Agent': userAgent }
+            headers: {
+                'User-Agent': userAgent,
+                // Add Referer to bypass basic anti-scraping checks
+                'Referer': 'https://www.sciencedaily.com/'
+            },
+            // Set a 10-second limit before timing out
+            timeout: 10000
         });
-        const $ = cheerio.load(data);
-        const urlList = [];
 
-        // Find elements using the strategy's selectors
-        $(config.container).each((i, el) => {
-            // Apply limit to prevent excessive scraping during testing/MVP
-            if (limit && i >= limit) return false;
-
-            const href = $(el).find(config.linkSelector).attr('href');
-            if (href) {
-                // Auto-complete absolute paths if the link is relative
-                const fullUrl = href.startsWith('http')
-                    ? href
-                    : `${config.baseUrl}${href}`;
-                urlList.push(fullUrl);
+        // 2. Load the response into Cheerio (handles HTML and XML fragments)
+        const $ = cheerio.load(data, {
+            xml: {
+                decodeEntities: true,
             }
+        }, false);
+
+        // 3. Use a Set to store unique URLs found on the page
+        const urlSet = new Set();
+
+        let elements;
+
+        // Check if a specific container exists; if not, search the whole document
+        if (config.container && $(config.container).length > 0) {
+            elements = $(config.container).find(config.linkSelector);
+        } else {
+            // Default to using the link selector directly (usually 'a' tags)
+            elements = $(config.linkSelector);
+        }
+
+        // Iterate through found elements to extract links
+        elements.each((i, el) => {
+            let href = $(el).attr('href');
+            if (!href) return;
+
+            // 4. Keyword Filtering (Inclusion)
+            // If keywords are defined (e.g., ['/releases/']), the link must contain one
+            if (config.includeKeywords && config.includeKeywords.length > 0) {
+                const isMatch = config.includeKeywords.some(key => href.includes(key));
+                if (!isMatch) return;
+            }
+
+            // 5. Keyword Filtering (Exclusion)
+            // Skip links containing unwanted patterns (e.g., ['/news/'])
+            if (config.excludeKeywords && config.excludeKeywords.length > 0) {
+                const isExcluded = config.excludeKeywords.some(key => href.includes(key));
+                if (isExcluded) return;
+            }
+
+            // 6. URL Completion
+            // If the link is relative, convert it to an absolute URL
+            let fullUrl = href;
+            if (!href.startsWith('http')) {
+                // Ensure no double slashes are created during concatenation
+                const base = config.baseUrl.replace(/\/$/, "");
+                const path = href.startsWith('/') ? href : `/${href}`;
+                fullUrl = `${base}${path}`;
+            }
+
+            // Add the finalized URL to our set
+            urlSet.add(fullUrl);
         });
 
-        return urlList;
+        const result = Array.from(urlSet);
+
+        // Log the outcome of the search
+        if (result.length > 0) {
+            console.log(chalk.gray(`      🔎 ListFetcher found ${result.length} valid links.`));
+        } else {
+            console.log(chalk.yellow(`      ⚠️ ListFetcher: No valid links found at ${listUrl}`));
+        }
+
+        return result;
+
     } catch (error) {
-        console.error(chalk.red(`❌ Failed to fetch list [${listUrl}]: ${error.message}`));
+        // Handle server-side (4xx/5xx) or general network errors
+        if (error.response) {
+            console.error(chalk.red(`❌ Server Error [${error.response.status}] at ${listUrl}`));
+        } else {
+            console.error(chalk.red(`❌ Network Error: ${error.message}`));
+        }
         return [];
     }
 }
