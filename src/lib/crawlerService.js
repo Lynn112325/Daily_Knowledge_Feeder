@@ -9,123 +9,260 @@ const { saveToDatabase } = require('./articleService');
 // Models
 const Source = require('../models/Source');
 const Task = require('../models/Task');
+const Article = require('../models/Article');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const BATCH_SIZE = 10;
 
-/**
- * Core Crawler Engine: Manages the background execution of scraping tasks and DB updates.
- * @param {Array} sourceIds - List of database IDs for categories to scrape.
- * @param {Number} limitPerCategory - Max number of articles to fetch per category.
- * @param {String} taskId - The ID of the current task for progress tracking.
- */
-async function runCrawlerEngine(sourceIds, limitPerCategory, taskId) {
-    let totalProcessed = 0;
-    let successCount = 0;
-    let failCount = 0;
+const robotsCache = new Map();
 
-    console.log(chalk.yellow(`\n--- 🚀 Starting Task #${taskId} ---`));
+async function checkRobotsWithCache(url, userAgent) {
+    const domain = new URL(url).origin;
+    if (robotsCache.has(domain)) {
+        return robotsCache.get(domain);
+    }
+    const result = await isAllowed(url, userAgent);
+    robotsCache.set(domain, result);
+    return result;
+}
+
+
+async function isTaskStopped(taskId) {
+    const task = await Task.findById(taskId).select('status');
+    if (!task || task.status === 'stopped') {
+        console.log(chalk.bgRed.white(` 🛑 STOP SIGNAL: Task #${taskId} terminated by user. `));
+        return true;
+    }
+    return false;
+}
+
+async function scrapeWithRetry(url, strategy, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await scrapeArticle(url, strategy, globalConfig.USER_AGENT);
+        } catch (err) {
+            const isNetworkError = [
+                'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT',
+                'ECONNREFUSED', 'EAI_AGAIN', 'ERR_BAD_RESPONSE'
+            ].some(code => err.message.includes(code) || (err.code && err.code.includes(code)));
+
+            if (isNetworkError && i < maxRetries - 1) {
+                const delay = (i + 1) * 5000;
+                console.log(chalk.yellow(`      ⚠️  Network Issue. Retrying in ${delay / 1000}s... (Attempt ${i + 1}/${maxRetries})`));
+                await sleep(delay);
+                continue;
+            }
+            throw err;
+        }
+    }
+}
+
+async function processUrlList(urls, source, strategy, taskId, stats) {
+    const existing = await Article.find({ originalUrl: { $in: urls } }).select('originalUrl');
+    const existingSet = new Set(existing.map(a => a.originalUrl));
+    const newUrls = urls.filter(u => !existingSet.has(u));
+
+    console.log(chalk.gray(`      📊 Page analysis: ${urls.length} total, ${newUrls.length} new to scrape.`));
+    if (newUrls.length === 0) {
+        console.log(chalk.green(`   ✨ No new historical articles. Category Backfilled!`));
+        await source.save();
+    }
+    for (const url of newUrls) {
+        if (await isTaskStopped(taskId)) return 'STOPPED';
+
+        try {
+            const { allowed, crawlDelay } = await checkRobotsWithCache(url, globalConfig.USER_AGENT);
+            if (!allowed) {
+                console.log(chalk.yellow(`      🚫 Skipped (Robots.txt): ${url.substring(0, 50)}...`));
+                continue;
+            }
+
+            await sleep((crawlDelay || 2) * 1000);
+
+            const detail = await scrapeWithRetry(url, strategy);
+
+            if (detail) {
+                await saveToDatabase({
+                    ...detail,
+                    originalUrl: url,
+                    siteName: source.siteName,
+                    category: source.category,
+                    sourceId: source._id
+                });
+                stats.successCount++;
+                console.log(chalk.green(`      ✅ Saved: ${detail.title.substring(0, 40)}...`));
+            }
+        } catch (err) {
+            stats.failCount++;
+            console.error(chalk.red(`      ❌ Article Permanent Failure [${url}]: ${err.message}`));
+        } finally {
+            stats.totalProcessed++;
+            await Task.findByIdAndUpdate(taskId, {
+                processedCount: stats.totalProcessed,
+                successCount: stats.successCount,
+                failCount: stats.failCount
+            });
+        }
+    }
+    return 'CONTINUE';
+}
+
+async function handleIncremental(sourceIds, limitPerCategory, taskId) {
+    const stats = { totalProcessed: 0, successCount: 0, failCount: 0 };
+    console.log(chalk.bold.yellow(`\n🚀 [ENGINE: INCREMENTAL] Task #${taskId} started.`));
+
+    robotsCache.clear();
 
     try {
+        await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
+
         for (const sourceId of sourceIds) {
-            // 1. Fetch source configuration from Database
+            if (await isTaskStopped(taskId)) break;
+
             const source = await Source.findById(sourceId);
-            if (!source) {
-                console.log(chalk.red(`❌ Source ID not found: ${sourceId}`));
-                continue;
-            }
-
-            // 2. Map the site to its specific scraping strategy
-            const currentStrategy = STRATEGIES[source.strategyKey];
-            if (!currentStrategy) {
-                console.error(chalk.red(`Strategy "${source.strategyKey}" not found.`));
-                continue;
-            }
-
-            // 3. Construct the full target URL and fetch the list of article links
+            const strategy = STRATEGIES[source.strategyKey];
             const fullListUrl = new URL(source.path, source.baseUrl).href;
 
-            // 1. 抓取該列表頁【所有的】文章 URL (假設有 50 筆)
-            const allPageUrls = await getList(fullListUrl, currentStrategy.listConfig, globalConfig.USER_AGENT);
+            console.log(chalk.blue(`\n📂 Category: ${source.category}`));
+            const allUrls = await getList(fullListUrl, strategy.listConfig, globalConfig.USER_AGENT);
 
-            if (!allPageUrls || allPageUrls.length === 0) {
-                console.log(chalk.yellow(`⚠️ No articles found in this category.`));
-                continue; // 跳到下一個 source
-            }
+            if (!allUrls?.length) continue;
 
-            // 2. 🚀 核心過濾邏輯：去資料庫比對這批 URL
-            // 找出資料庫中已經包含的 URL (只取 originalUrl 欄位以節省記憶體)
-            const existingArticles = await Article.find({
-                originalUrl: { $in: allPageUrls }
-            }).select('originalUrl');
+            const targetUrls = allUrls.slice(0, limitPerCategory);
+            const result = await processUrlList(targetUrls, source, strategy, taskId, stats);
 
-            // 將已存在的 URL 轉成 Set，查詢速度最快 O(1)
-            const existingUrlSet = new Set(existingArticles.map(a => a.originalUrl));
-
-            // 3. 過濾出「真正全新」的 URL
-            const newUrls = allPageUrls.filter(url => !existingUrlSet.has(url));
-
-            console.log(chalk.gray(`Page has ${allPageUrls.length} links. Found ${newUrls.length} NEW links.`));
-
-            // 4. 最後才套用使用者的限制數量 (Limit)
-            const targetUrls = newUrls.slice(0, limitPerCategory);
-            console.log(chalk.cyan(`Will scrape exactly ${targetUrls.length} new articles.`));
-
-            // 4. Iterate through each article link
-            for (const url of urlList.slice(0, limitPerCategory)) {
-                try {
-                    // A. Compliance: Check robots.txt and implement crawl delay
-                    const { allowed, crawlDelay } = await isAllowed(url, globalConfig.USER_AGENT);
-                    if (!allowed) continue;
-
-                    await sleep(crawlDelay ? crawlDelay * 1000 : 2000);
-
-                    // B. Extraction: Scrape article content using the strategy
-                    const detail = await scrapeArticle(url, currentStrategy, globalConfig.USER_AGENT);
-
-                    if (detail) {
-                        // C. Persistence: Process and save via unified service (includes dictionary annotation)
-                        await saveToDatabase({
-                            ...detail,
-                            originalUrl: url,
-                            siteName: source.siteName,
-                            category: source.category,
-                            sourceId: source._id,
-                            originalDate: detail.originalDate || detail.date
-                        });
-
-                        successCount++;
-                    }
-                } catch (err) {
-                    failCount++;
-                    console.error(chalk.red(`❌ Error at ${url}: ${err.message}`));
-                } finally {
-                    totalProcessed++;
-                    // D. Progress Tracking: Update Task status in real-time
-                    await Task.findByIdAndUpdate(taskId, {
-                        processedCount: totalProcessed,
-                        successCount,
-                        failCount
-                    });
-                }
-            }
-            // Update the category's last crawl timestamp
+            if (result === 'STOPPED') break;
             await Source.findByIdAndUpdate(sourceId, { lastCrawledAt: new Date() });
         }
 
-        // 5. Finalize: Mark task as completed
-        await Task.findByIdAndUpdate(taskId, {
-            status: 'completed',
-            completedAt: new Date()
-        });
-        console.log(chalk.bold.green(`\n🏁 Task Finished. Success: ${successCount}, Fail: ${failCount}`));
+        const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
+        await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
+        console.log(chalk.bold.green(`\n🏁 Incremental Task Finished.`));
 
-    } catch (criticalError) {
-        // Handle unexpected engine crashes
-        await Task.findByIdAndUpdate(taskId, {
-            status: 'failed',
-            errorLog: criticalError.message
-        });
-        console.error(chalk.bgRed.white(' CRITICAL ERROR '), criticalError.stack);
+    } catch (err) {
+        console.error(chalk.bgRed(" ENGINE CRASH "), err);
+        await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
     }
 }
-module.exports = { runCrawlerEngine };
+
+async function handleBackfill(sourceIds, pagesToScroll, taskId) {
+    const stats = { totalProcessed: 0, successCount: 0, failCount: 0 };
+
+    robotsCache.clear();
+
+    console.log(chalk.bold.yellow(`\n⛏️ [ENGINE: BACKFILL] Task #${taskId} started.`));
+
+    try {
+        await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
+
+        for (const sourceId of sourceIds) {
+            if (await isTaskStopped(taskId)) break;
+
+            const source = await Source.findById(sourceId);
+            const strategy = STRATEGIES[source.strategyKey];
+            const backfillType = strategy.listConfig.backfillType || 'PAGINATION';
+            const base = source.baseUrl.replace(/\/$/, "");
+
+            console.log(chalk.yellow(`\n📂 Category: ${source.category} [Mode: ${backfillType}]`));
+
+            if (backfillType === 'SINGLE_PAGE_API') {
+                const apiUrl = strategy.listConfig.buildApiUrl(base, source.path);
+                console.log(chalk.magenta(`   📡 Fetching full historical API: ${apiUrl}`));
+
+                const allUrls = await getList(apiUrl, strategy.listConfig, globalConfig.USER_AGENT);
+
+                if (!allUrls || allUrls.length === 0) {
+                    source.isBackfillCompleted = true;
+                    await source.save();
+                    continue;
+                }
+
+                const startIndex = (source.lastProcessedUnit - 1) * BATCH_SIZE;
+                const totalUrls = allUrls.length;
+                const endIndex = Math.min(startIndex + BATCH_SIZE, totalUrls);
+                const currentBatchUrls = allUrls.slice(startIndex, endIndex);
+
+                await Task.findByIdAndUpdate(taskId, { totalTarget: currentBatchUrls.length });
+
+                await processUrlList(currentBatchUrls, source, strategy, taskId, stats);
+
+                source.lastProcessedUnit += 1;
+                const progress = ((endIndex / totalUrls) * 100).toFixed(1);
+
+                console.log(chalk.magenta(
+                    `📍 Depth: [Batch ${source.lastProcessedUnit}] | ` +
+                    `Range: ${startIndex + 1}-${endIndex} of ${totalUrls} | ` +
+                    `Coverage: ${progress}%`
+                ));
+
+                if (endIndex >= totalUrls) {
+                    console.log(chalk.bgMagenta.white(' 🏁 REACHED THE END OF HISTORICAL DATA '));
+                    source.isBackfillCompleted = true;
+                }
+
+                await source.save();
+            }
+            // TODO: Unimplemented
+            else if (backfillType === 'PAGINATION') {
+                let currentPage = source.lastProcessedUnit || 1;
+
+                await Task.findByIdAndUpdate(taskId, { totalTarget: pagesToScroll * 20 });
+
+                for (let p = 0; p < pagesToScroll; p++) {
+                    if (await isTaskStopped(taskId)) break;
+
+                    const pageUrl = strategy.listConfig.buildPageUrl
+                        ? strategy.listConfig.buildPageUrl(base, source.path, currentPage)
+                        : `${base}${source.path}?page=${currentPage}`;
+
+                    console.log(chalk.gray(`   📑 Fetching Page ${currentPage}: ${pageUrl}`));
+                    const urls = await getList(pageUrl, strategy.listConfig, globalConfig.USER_AGENT);
+
+                    if (!urls || urls.length === 0) {
+                        console.log(chalk.yellow(`   ⏹️ No content found at Page ${currentPage}. Marking category as Backfilled.`));
+                        source.isBackfillCompleted = true;
+                        await source.save();
+                        break;
+                    }
+
+                    const result = await processUrlList(urls, source, strategy, taskId, stats);
+                    if (result === 'STOPPED') break;
+
+                    currentPage++;
+                    source.lastProcessedUnit = currentPage;
+                    await source.save();
+
+                    await sleep(3000);
+                }
+            }
+        }
+        const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
+        await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
+        console.log(chalk.bold.green(`\n🏁 Backfill Task Ended as [${finalStatus}].`));
+
+    } catch (err) {
+        console.error(chalk.bgRed(" BACKFILL CRASH "), err);
+        await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
+    }
+}
+
+function getTaskProgressInfo(strategyKey, currentCount) {
+    const strategy = STRATEGIES[strategyKey];
+    const type = strategy?.listConfig?.backfillType || 'PAGINATION';
+
+    const config = {
+        'SINGLE_PAGE_API': { label: 'Batches', unit: 'batch' },
+        'INFINITE_SCROLL': { label: 'Scrolls', unit: 'scroll' },
+        'PAGINATION': { label: 'Pages', unit: 'page' }
+    };
+
+    const info = config[type] || config['PAGINATION'];
+
+    return {
+        label: info.label,
+        display: `${info.label} Scraped: ${currentCount}`
+    };
+}
+
+
+module.exports = { handleIncremental, handleBackfill, getTaskProgressInfo };
