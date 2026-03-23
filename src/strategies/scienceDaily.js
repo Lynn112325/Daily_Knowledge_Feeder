@@ -13,7 +13,17 @@ const scienceDailyStrategy = {
         container: '.latest-head',   // Each article entry block
         linkSelector: 'a',          // The link inside the block
         baseUrl: 'https://www.sciencedaily.com',
-        limit: null
+        limit: null,
+
+        paginationType: 'xml_summary',
+        includeKeywords: ['/releases/'],
+        backfillType: 'SINGLE_PAGE_API',
+
+        buildApiUrl: (base, path) => {
+            const cleanPath = path.replace(/\/+$/, "");
+            const fakeUid = '177409' + Math.floor(Math.random() * 1000000);
+            return `${base}${cleanPath}/summaries.xml?uid=${fakeUid}&_=${Date.now()}`;
+        }
     },
 
     // Rules for the source table
