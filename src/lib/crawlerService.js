@@ -46,6 +46,21 @@ async function isTaskStopped(taskId) {
 }
 
 /**
+ * Check if existing articles overlap with the current category.
+ * If found, add the current category to their tags without re-scraping.
+ */
+async function handleCategoryOverlap(urls, currentCategory) {
+    const result = await Article.updateMany(
+        { originalUrl: { $in: urls } },
+        { $addToSet: { category: currentCategory } } // Adds to array only if not already present
+    );
+    if (result.modifiedCount > 0) {
+        console.log(chalk.blue(`      🏷️  Overlap: Updated ${result.modifiedCount} articles with new category [${currentCategory}]`));
+    }
+    return result.modifiedCount;
+}
+
+/**
  * Strategies for different backfill mechanisms (Strategy Pattern)
  */
 const BACKFILL_HANDLERS = {
@@ -74,6 +89,11 @@ const BACKFILL_HANDLERS = {
 
         // Advance the progress unit (batch count) based on actual processed items
         source.lastProcessedUnit += Math.ceil(targetUrls.length / globalConfig.BATCH_SIZE);
+
+        console.log(chalk.magenta(
+            `📍 Depth: [Batch ${source.lastProcessedUnit}] | ` +
+            `Range: ${startIndex + 1}-${endIndex} of ${allUrls.length} | `
+        ));
 
         // Mark as completed if we reached the end of the array
         if (endIndex >= allUrls.length) {
@@ -152,7 +172,10 @@ async function scrapeWithRetry(url, strategy, maxRetries = 3) {
  * The core logic: Filter new URLs, check permissions, scrape, and save
  */
 async function processUrlList(urls, source, strategy, taskId, stats) {
-    // 1. Remove URLs that are already in our database
+    // 1. Handle Overlaps: Update categories for articles already in the DB
+    await handleCategoryOverlap(urls, source.category);
+
+    // 2. Filter: Only scrape URLs that do not exist at all in our database
     const existing = await Article.find({ originalUrl: { $in: urls } }).select('originalUrl');
     const existingSet = new Set(existing.map(a => a.originalUrl));
     const newUrls = urls.filter(u => !existingSet.has(u));
@@ -286,8 +309,10 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
 
         const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
         await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
+        console.log(chalk.bold.green(`\n🏁 Backfill Task Ended as [${finalStatus}].`));
 
     } catch (err) {
+        console.error(chalk.bgRed(" BACKFILL CRASH "), err);
         await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
     }
 }
