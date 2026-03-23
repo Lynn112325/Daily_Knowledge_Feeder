@@ -70,7 +70,6 @@ const BACKFILL_HANDLERS = {
         const endIndex = Math.min(startIndex + (depthLimit * globalConfig.BATCH_SIZE), allUrls.length);
         const targetUrls = allUrls.slice(startIndex, endIndex);
 
-        await Task.findByIdAndUpdate(taskId, { totalTarget: targetUrls.length });
         await processUrlList(targetUrls, source, strategy, taskId, stats);
 
         // Advance the progress unit (batch count) based on actual processed items
