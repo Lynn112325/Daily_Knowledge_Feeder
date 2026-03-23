@@ -15,7 +15,7 @@ const Article = require('../models/Article');
 // Utility to pause execution for a set time
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // How many URLs to process per "batch" for API-based sites
-const BATCH_SIZE = 10;
+const BATCH_SIZE = globalConfig.BATCH_SIZE;
 
 // --- ROBOTS.TXT CACHE ---
 // Store robots.txt results here so we don't ask the server every single time
