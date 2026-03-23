@@ -14,8 +14,6 @@ const Article = require('../models/Article');
 
 // Utility to pause execution for a set time
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-// How many URLs to process per "batch" for API-based sites
-const BATCH_SIZE = globalConfig.BATCH_SIZE;
 
 // --- ROBOTS.TXT CACHE ---
 // Store robots.txt results here so we don't ask the server every single time
@@ -185,7 +183,7 @@ async function handleIncremental(sourceIds, limitPerCategory, taskId) {
  * Mode 2: Deep History Scrape
  * Go back in time through pages or large API results.
  */
-async function handleBackfill(sourceIds, pagesToScroll, taskId) {
+async function handleBackfill(sourceIds, depthLimit, taskId) {
     const stats = { totalProcessed: 0, successCount: 0, failCount: 0 };
     robotsCache.clear();
 
@@ -219,9 +217,9 @@ async function handleBackfill(sourceIds, pagesToScroll, taskId) {
                 }
 
                 // Instead of processing all at once, process a small "Batch"
-                const startIndex = (source.lastProcessedUnit - 1) * BATCH_SIZE;
+                const startIndex = (source.lastProcessedUnit - 1) * depthLimit;
                 const totalUrls = allUrls.length;
-                const endIndex = Math.min(startIndex + BATCH_SIZE, totalUrls);
+                const endIndex = Math.min(startIndex + depthLimit, totalUrls);
                 const currentBatchUrls = allUrls.slice(startIndex, endIndex);
 
                 await Task.findByIdAndUpdate(taskId, { totalTarget: currentBatchUrls.length });
@@ -252,9 +250,9 @@ async function handleBackfill(sourceIds, pagesToScroll, taskId) {
             else if (backfillType === 'PAGINATION') {
                 let currentPage = source.lastProcessedUnit || 1;
 
-                await Task.findByIdAndUpdate(taskId, { totalTarget: pagesToScroll * 20 });
+                await Task.findByIdAndUpdate(taskId, { totalTarget: depthLimit * 20 });
 
-                for (let p = 0; p < pagesToScroll; p++) {
+                for (let p = 0; p < depthLimit; p++) {
                     if (await isTaskStopped(taskId)) break;
 
                     // Build the URL for the specific page number
