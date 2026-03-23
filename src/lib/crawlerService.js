@@ -46,6 +46,84 @@ async function isTaskStopped(taskId) {
 }
 
 /**
+ * Strategies for different backfill mechanisms (Strategy Pattern)
+ */
+const BACKFILL_HANDLERS = {
+    /**
+     * Scenario A: Site returns a single large URL list (e.g., XML/JSON API)
+     * Logic: Slice the full list into batches based on depthLimit and BATCH_SIZE
+     */
+    'SINGLE_PAGE_API': async (source, strategy, depthLimit, taskId, stats) => {
+        const base = source.baseUrl.replace(/\/$/, "");
+        const apiUrl = strategy.listConfig.buildApiUrl(base, source.path);
+
+        // Fetch the entire historical URL list once
+        const allUrls = await getList(apiUrl, strategy.listConfig, globalConfig.USER_AGENT);
+        if (!allUrls?.length) {
+            source.isBackfillCompleted = true;
+            return;
+        }
+
+        // Calculate offset: lastProcessedUnit tracks how many BATCH_SIZE blocks were finished
+        const startIndex = (source.lastProcessedUnit - 1) * globalConfig.BATCH_SIZE;
+        // endIndex is determined by how many additional batches the user requested (depthLimit)
+        const endIndex = Math.min(startIndex + (depthLimit * globalConfig.BATCH_SIZE), allUrls.length);
+        const targetUrls = allUrls.slice(startIndex, endIndex);
+
+        await Task.findByIdAndUpdate(taskId, { totalTarget: targetUrls.length });
+        await processUrlList(targetUrls, source, strategy, taskId, stats);
+
+        // Advance the progress unit (batch count) based on actual processed items
+        source.lastProcessedUnit += Math.ceil(targetUrls.length / globalConfig.BATCH_SIZE);
+
+        // Mark as completed if we reached the end of the array
+        if (endIndex >= allUrls.length) {
+            source.isBackfillCompleted = true;
+        }
+    },
+
+    /**
+     * Scenario B: Traditional page-by-page navigation
+     * Logic: Loop through a sequence of pages starting from the last checkpoint
+     */
+    'PAGINATION': async (source, strategy, depthLimit, taskId, stats) => {
+        const base = source.baseUrl.replace(/\/$/, "");
+        let currentPage = source.lastProcessedUnit || 1;
+
+        // Estimate total target (assuming ~20 items per page) for UI progress bar
+        await Task.findByIdAndUpdate(taskId, { totalTarget: depthLimit * 20 });
+
+        // Iterate through pages up to the requested depthLimit
+        for (let p = 0; p < depthLimit; p++) {
+            if (await isTaskStopped(taskId)) break;
+
+            const pageUrl = strategy.listConfig.buildPageUrl
+                ? strategy.listConfig.buildPageUrl(base, source.path, currentPage)
+                : `${base}${source.path}?page=${currentPage}`;
+
+            const urls = await getList(pageUrl, strategy.listConfig, globalConfig.USER_AGENT);
+
+            // If page is empty, we have reached the end of the history
+            if (!urls?.length) {
+                source.isBackfillCompleted = true;
+                break;
+            }
+
+            const result = await processUrlList(urls, source, strategy, taskId, stats);
+            if (result === 'STOPPED') break;
+
+            // Save checkpoint after every successful page
+            currentPage++;
+            source.lastProcessedUnit = currentPage;
+            await source.save();
+
+            // Throttling to prevent IP blocks
+            await sleep(3000);
+        }
+    }
+};
+
+/**
  * Try to scrape a URL. If the network fails, wait and try again up to 3 times.
  */
 async function scrapeWithRetry(url, strategy, maxRetries = 3) {
@@ -187,8 +265,6 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
     const stats = { totalProcessed: 0, successCount: 0, failCount: 0 };
     robotsCache.clear();
 
-    console.log(chalk.bold.yellow(`\n⛏️ [ENGINE: BACKFILL] Task #${taskId} started.`));
-
     try {
         await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
 
@@ -197,97 +273,22 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
 
             const source = await Source.findById(sourceId);
             const strategy = STRATEGIES[source.strategyKey];
-            const backfillType = strategy.listConfig.backfillType || 'PAGINATION';
-            const base = source.baseUrl.replace(/\/$/, "");
+            const type = strategy.listConfig.backfillType || 'PAGINATION';
 
-            console.log(chalk.yellow(`\n📂 Category: ${source.category} [Mode: ${backfillType}]`));
-
-            // SCENARIO A: The site provides one giant XML/JSON list of all history
-            if (backfillType === 'SINGLE_PAGE_API') {
-                const apiUrl = strategy.listConfig.buildApiUrl(base, source.path);
-                console.log(chalk.magenta(`   📡 Fetching full historical API: ${apiUrl}`));
-
-                // Get every single URL at once
-                const allUrls = await getList(apiUrl, strategy.listConfig, globalConfig.USER_AGENT);
-
-                if (!allUrls || allUrls.length === 0) {
-                    source.isBackfillCompleted = true;
-                    await source.save();
-                    continue;
-                }
-
-                // Instead of processing all at once, process a small "Batch"
-                const startIndex = (source.lastProcessedUnit - 1) * depthLimit;
-                const totalUrls = allUrls.length;
-                const endIndex = Math.min(startIndex + depthLimit, totalUrls);
-                const currentBatchUrls = allUrls.slice(startIndex, endIndex);
-
-                await Task.findByIdAndUpdate(taskId, { totalTarget: currentBatchUrls.length });
-
-                await processUrlList(currentBatchUrls, source, strategy, taskId, stats);
-
-                // Bookmark where we are so we can resume next time
-                source.lastProcessedUnit += 1;
-                const progress = ((endIndex / totalUrls) * 100).toFixed(1);
-
-                console.log(chalk.magenta(
-                    `📍 Depth: [Batch ${source.lastProcessedUnit}] | ` +
-                    `Range: ${startIndex + 1}-${endIndex} of ${totalUrls} | ` +
-                    `Coverage: ${progress}%`
-                ));
-
-                // If we reached the end of the giant list, mark as finished
-                if (endIndex >= totalUrls) {
-                    console.log(chalk.bgMagenta.white(' 🏁 REACHED THE END OF HISTORICAL DATA '));
-                    source.isBackfillCompleted = true;
-                }
-
+            const handler = BACKFILL_HANDLERS[type];
+            if (handler) {
+                console.log(chalk.yellow(`\n📂 [${type}] Processing: ${source.category}`));
+                await handler(source, strategy, depthLimit, taskId, stats);
                 await source.save();
-            }
-
-            // TODO: Unimplemented
-            // SCENARIO B: The site uses traditional Page 1, Page 2...
-            else if (backfillType === 'PAGINATION') {
-                let currentPage = source.lastProcessedUnit || 1;
-
-                await Task.findByIdAndUpdate(taskId, { totalTarget: depthLimit * 20 });
-
-                for (let p = 0; p < depthLimit; p++) {
-                    if (await isTaskStopped(taskId)) break;
-
-                    // Build the URL for the specific page number
-                    const pageUrl = strategy.listConfig.buildPageUrl
-                        ? strategy.listConfig.buildPageUrl(base, source.path, currentPage)
-                        : `${base}${source.path}?page=${currentPage}`;
-
-                    console.log(chalk.gray(`   📑 Fetching Page ${currentPage}: ${pageUrl}`));
-                    const urls = await getList(pageUrl, strategy.listConfig, globalConfig.USER_AGENT);
-
-                    if (!urls || urls.length === 0) {
-                        console.log(chalk.yellow(`   ⏹️ No content found at Page ${currentPage}. Marking category as Backfilled.`));
-                        source.isBackfillCompleted = true;
-                        await source.save();
-                        break;
-                    }
-
-                    const result = await processUrlList(urls, source, strategy, taskId, stats);
-                    if (result === 'STOPPED') break;
-
-                    // Save the page number as a checkpoint
-                    currentPage++;
-                    source.lastProcessedUnit = currentPage;
-                    await source.save();
-
-                    await sleep(3000);
-                }
+            } else {
+                console.warn(chalk.red(`No handler for backfill type: ${type}`));
             }
         }
+
         const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
         await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
-        console.log(chalk.bold.green(`\n🏁 Backfill Task Ended as [${finalStatus}].`));
 
     } catch (err) {
-        console.error(chalk.bgRed(" BACKFILL CRASH "), err);
         await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
     }
 }
