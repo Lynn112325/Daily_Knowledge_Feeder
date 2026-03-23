@@ -4,6 +4,8 @@ const taskSchema = new mongoose.Schema({
     // Task name or target website
     name: { type: String, default: "General Scrape Task" },
 
+    crawlMode: { type: String, enum: ['incremental', 'backfill'], default: 'incremental' },
+
     // Status: pending, running, completed, failed
     status: {
         type: String,
