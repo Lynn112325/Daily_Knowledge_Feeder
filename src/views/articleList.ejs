@@ -1,0 +1,220 @@
+<%- include('partials/header', { title: 'All Articles' }) %>
+
+    <div class="flex-grow w-full max-w-7xl mx-auto px-4 pb-8 flex flex-col" x-data="articleManager()">
+
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mt-2">📰 Article Library</h1>
+                <p class="text-sm text-slate-500">Explore and manage your collected knowledge base.</p>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round"
+                                stroke-linejoin="round" stroke-width="2"></path>
+                        </svg>
+                    </span>
+                    <input type="text" x-model="searchQuery" placeholder="Search titles or categories..."
+                        class="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none w-64">
+                </div>
+
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Articles</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= articles.length %>
+                </p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Unread</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= articles.filter(a=> !a.isRead).length %>
+                </p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-emerald-500 uppercase tracking-wider">Today Added</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= articles.filter(a=> a.createdAt && new Date(a.createdAt).toDateString() === new
+                        Date().toDateString()).length %>
+                </p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Categories</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= [...new Set(articles.map(a=> a.category))].length %>
+                </p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Title
+                            & Author</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Category</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Collected At</th>
+                        <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-slate-200">
+                    <% articles.forEach(article=> { %>
+                        <tr x-show="matchesSearch('<%= article.title %> <%= article.category %>')"
+                            class="hover:bg-slate-50 transition">
+
+                            <td class="px-6 py-4 max-w-[300px]">
+                                <div class="min-w-0 flex items-center" x-data="{ showFullTitle: false }"
+                                    :class="{ 'relative z-50': showFullTitle, 'relative z-0': !showFullTitle }">
+
+                                    <div
+                                        class="h-10 w-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-lg shrink-0">
+                                        <%= article.title[0].toUpperCase() %>
+                                    </div>
+
+                                    <div class="ml-4 overflow-visible relative min-w-0 flex-1">
+                                        <div @mouseenter="showFullTitle = true" @mouseleave="showFullTitle = false"
+                                            class="text-sm font-bold text-slate-900 truncate max-w-[200px] md:max-w-md cursor-help">
+                                            <%= article.title %>
+                                        </div>
+
+                                        <div x-show="showFullTitle" x-cloak
+                                            x-transition:enter="transition ease-out duration-100"
+                                            x-transition:enter-start="opacity-0 translate-y-1"
+                                            x-transition:enter-end="opacity-100 translate-y-0"
+                                            class="absolute z-[100] bottom-full left-0 mb-2 w-max max-w-xs md:max-w-sm p-2 bg-slate-800 text-white text-xs rounded shadow-xl leading-relaxed pointer-events-none">
+                                            <%= article.title %>
+                                                <div class="absolute -bottom-1 left-4 w-2 h-2 bg-slate-800 rotate-45">
+                                                </div>
+                                        </div>
+
+                                        <div class="text-xs text-slate-500 italic">
+                                            By <%= article.author || 'Unknown' %>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td class="px-6 py-4 max-w-[120px]">
+                                <div class="flex items-center gap-1.5" x-data="{ firstOpen: false, moreOpen: false }">
+                                    <% if (Array.isArray(article.category) && article.category.length> 0) { %>
+
+                                        <div class="relative flex items-center">
+                                            <span @mouseenter="firstOpen = true" @mouseleave="firstOpen = false"
+                                                class="block truncate max-w-[120px] px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100 cursor-help">
+                                                <%= article.category[0] %>
+                                            </span>
+
+                                            <div x-show="firstOpen" x-cloak x-transition
+                                                class="absolute z-50 bottom-full left-0 mb-2 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg whitespace-nowrap">
+                                                <%= article.category[0] %>
+                                                    <div
+                                                        class="absolute -bottom-1 left-3 w-2 h-2 bg-slate-800 rotate-45">
+                                                    </div>
+                                            </div>
+                                        </div>
+
+                                        <% if (article.category.length> 1) { %>
+                                            <div class="relative flex items-center">
+                                                <button @mouseenter="moreOpen = true" @mouseleave="moreOpen = false"
+                                                    class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 transition">
+                                                    +<%= article.category.length - 1 %>
+                                                </button>
+
+                                                <div x-show="moreOpen" x-cloak x-transition
+                                                    class="absolute z-50 bottom-full left-0 mb-2 w-56 p-2 bg-white shadow-xl border border-slate-100 rounded-lg flex flex-wrap gap-1">
+                                                    <% article.category.slice(1).forEach((cat)=> { %>
+                                                        <span
+                                                            class="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+                                                            <%= cat %>
+                                                        </span>
+                                                        <% }) %>
+                                                            <div
+                                                                class="absolute -bottom-1 left-3 w-2 h-2 bg-white border-b border-r border-slate-100 rotate-45">
+                                                            </div>
+                                                </div>
+                                            </div>
+                                            <% } %>
+
+                                                <% } else if (typeof article.category==='string' ) { %>
+                                                    <div class="relative flex items-center" x-data="{ open: false }">
+                                                        <span @mouseenter="open = true" @mouseleave="open = false"
+                                                            class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100 truncate max-w-[150px] cursor-help">
+                                                            <%= article.category %>
+                                                        </span>
+                                                        <div x-show="open" x-cloak x-transition
+                                                            class="absolute z-50 bottom-full left-0 mb-2 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg whitespace-nowrap">
+                                                            <%= article.category %>
+                                                                <div
+                                                                    class="absolute -bottom-1 left-3 w-2 h-2 bg-slate-800 rotate-45">
+                                                                </div>
+                                                        </div>
+                                                    </div>
+                                                    <% } %>
+                                </div>
+                            </td>
+
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <% if (!article.isRead) { %>
+                                    <span
+                                        class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 animate-pulse">New</span>
+                                    <% } else { %>
+                                        <span
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500">Read</span>
+                                        <% } %>
+                            </td>
+
+                            <td class="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
+                                <%= new Date(article.createdAt).toLocaleString() %>
+                            </td>
+
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex justify-end items-center gap-3">
+                                    <a href="/articles/<%= article._id %>"
+                                        class="text-blue-600 hover:text-blue-900 transition">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round"
+                                                stroke-linejoin="round" stroke-width="2"></path>
+                                            <path
+                                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                                stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                                        </svg>
+                                    </a>
+                                    <button class="text-slate-400 hover:text-red-600 transition">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function articleManager() {
+            return {
+                searchQuery: '',
+                matchesSearch(text) {
+                    if (!this.searchQuery) return true;
+                    return text.toLowerCase().includes(this.searchQuery.toLowerCase());
+                }
+            }
+        }
+    </script>
+
+    <%- include('partials/footer') %>
