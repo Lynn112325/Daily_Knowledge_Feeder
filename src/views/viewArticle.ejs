@@ -1,36 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-  <meta charset="UTF-8">
-  <title>Vditor Markdown Learning Tool</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vditor/dist/index.css" />
-  <script src="https://cdn.jsdelivr.net/npm/vditor/dist/index.min.js"></script>
-  <link rel="stylesheet" href="style.css">
-  <style>
-    body {
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      padding: 20px;
-      box-sizing: border-box;
-      background: #f9fafb;
-    }
-
-    #vditor {
-      flex: 1;
-    }
-  </style>
-</head>
-
-<body>
-
-  <nav class="breadcrumb">
-    <a class="breadcrumb-item" href="#">Main</a>
-    <a class="breadcrumb-item" href="#">Sub</a>
-    <a class="breadcrumb-item active" aria-current="page">Active</a>
-  </nav>
+<%- include('partials/header', { title: 'Article View / Edit' }) %>
 
   <div id="vditor"></div>
   <div id="tooltip"></div>
@@ -39,10 +7,10 @@
     const tooltip = document.getElementById('tooltip');
 
     // 1. Get the Markdown text from Express
-    const initialContent = <%- JSON.stringify(initialMarkdown) %>;
+    const initialContent = <% - JSON.stringify(initialMarkdown) %>;
 
     // 2. Get the Unique ID from Express
-    const currentArticleId = <%- JSON.stringify(articleId) %>;
+    const currentArticleId = <% - JSON.stringify(articleId) %>;
 
     const vditor = new Vditor('vditor', {
       height: '100%',
@@ -170,6 +138,5 @@
       if (!tooltip.contains(e.target)) tooltip.style.display = 'none';
     });
   </script>
-</body>
 
-</html>
+  <%- include('partials/footer.ejs') %>
