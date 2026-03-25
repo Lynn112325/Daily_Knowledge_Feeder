@@ -13,7 +13,7 @@ const articleSchema = new mongoose.Schema({
     siteName: { type: String, required: true },
 
     // Categorization path inherited from the Source (e.g., "/Health/Allergy")
-    category: { type: String, required: true },
+    category: { type: [String], required: true },
     tags: [String], // Array of keywords for searching and filtering
     content: { type: String, required: true }, // The main body of the article, stored as a Markdown string
     summary: { type: String },

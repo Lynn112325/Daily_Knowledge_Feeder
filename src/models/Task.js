@@ -21,6 +21,7 @@ const taskSchema = new mongoose.Schema({
 
     // Error details for failed status
     errorLog: { type: String },
+    logs: { type: [String] },
 
     // Timing stats
     startedAt: { type: Date, default: Date.now },
