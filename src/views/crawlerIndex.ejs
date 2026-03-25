@@ -1,0 +1,147 @@
+<%- include('partials/header', { title: 'Crawler Management' }) %>
+
+    <div class="flex-grow w-full max-w-7xl mx-auto px-4 pb-8 flex flex-col" x-data="sourceManager()">
+
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mt-2">🔌 Crawler Sources</h1>
+                <p class="text-sm text-slate-500">Manage your targets and check their sync status.</p>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round"
+                                stroke-linejoin="round" stroke-width="2"></path>
+                        </svg>
+                    </span>
+                    <input type="text" x-model="searchQuery" placeholder="Search categories..."
+                        class="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none w-64">
+                </div>
+
+                <a href="/crawler/backfill"
+                    class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition shadow-sm">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                        </path>
+                    </svg>
+                    Deep Dive
+                </a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Sources</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= sources.length %>
+                </p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-green-500 uppercase tracking-wider">Active</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= sources.filter(s=> s.isActive).length %>
+                </p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Today Updated</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= sources.filter(s=> s.lastCrawledAt && new Date(s.lastCrawledAt).toDateString() === new
+                        Date().toDateString()).length %>
+                </p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Websites</p>
+                <p class="text-2xl font-bold text-slate-800">
+                    <%= [...new Set(sources.map(s=> s.siteName))].length %>
+                </p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Site & Category</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Path</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Last Crawl</th>
+                        <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-slate-200">
+                    <% sources.forEach(source=> { %>
+                        <tr x-show="matchesSearch('<%= source.category %> <%= source.siteName %>')"
+                            class="hover:bg-slate-50 transition">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div
+                                        class="h-8 w-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
+                                        <%= source.siteName[0] %>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-bold text-slate-900">
+                                            <%= source.category %>
+                                        </div>
+                                        <div class="text-xs text-slate-500">
+                                            <%= source.siteName %>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <code
+                                    class="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-600"><%= source.path %></code>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <% if (source.isActive) { %>
+                                    <span
+                                        class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                                    <% } else { %>
+                                        <span
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500">Disabled</span>
+                                        <% } %>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                <%= source.lastCrawledAt ? new Date(source.lastCrawledAt).toLocaleString() : 'Never' %>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex justify-end items-center">
+                                    <button @click="toggleActive('<%= source._id %>')"
+                                        :class="isActive ? 'bg-blue-600' : 'bg-slate-200'"
+                                        class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                                        x-data="{ isActive: <%= source.isActive %> }" role="switch"
+                                        :aria-checked="isActive">
+
+                                        <span :class="isActive ? 'translate-x-5' : 'translate-x-0'"
+                                            class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out">
+                                        </span>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function sourceManager() {
+            return {
+                searchQuery: '',
+                matchesSearch(text) {
+                    if (!this.searchQuery) return true;
+                    return text.toLowerCase().includes(this.searchQuery.toLowerCase());
+                }
+            }
+        }
+    </script>
+
+    <%- include('partials/footer') %>

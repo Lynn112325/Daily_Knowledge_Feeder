@@ -1,0 +1,333 @@
+<%- include('partials/header', { title: 'Deep Dive' }) %>
+  <div class="flex-grow w-full max-w-7xl mx-auto px-4 pb-8 flex flex-col gap-6">
+
+    <div class="bg-white shadow-lg rounded-lg p-6 flex flex-col" x-data="crawlerManager()">
+      <h2 class="text-2xl font-bold mb-6 border-b pb-4 text-700">
+        ⛏️ Data Excavation (Manual History Retrieval)
+      </h2>
+
+      <form action="/crawler/start" method="POST" class="flex flex-col">
+        <input type="hidden" name="crawlMode" value="backfill">
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+          <div class="md:col-span-1">
+            <label class="block text-gray-700 font-bold mb-2">1. Select Target Website</label>
+            <select x-model="selectedSite" @change="fetchCategories()" name="siteName"
+              class="w-full border p-3 rounded-md focus:ring-2 focus:ring-blue-500 bg-blue-50">
+              <option value="">-- Select a Website --</option>
+              <% sites.forEach(site=> { %>
+                <option value="<%= site %>">
+                  <%= site %>
+                </option>
+                <% }) %>
+            </select>
+            <div class="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg shadow-sm" x-show="selectedSite">
+              <div class="flex justify-between items-center mb-2">
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider"
+                  x-text="helpText?.title"></label>
+              </div>
+
+              <div class="relative mb-3">
+                <input type="number" name="limit" x-model.number="depthLimit" min="1" max="50"
+                  class="w-full border-slate-300 p-2 pr-12 rounded-md focus:ring-2 focus:ring-blue-500 font-mono text-sm shadow-inner">
+                <span class="absolute right-3 top-2 text-[10px] font-bold text-slate-400"
+                  x-text="helpText?.unit"></span>
+              </div>
+
+              <div class="mt-2 px-1 flex items-center gap-2 text-[11px]" x-show="selectedIds.length > 0">
+                <span class="flex items-center gap-1 text-blue-600 font-bold">
+                  Est. Goal:
+                </span>
+                <span class="font-black text-slate-700">
+                  <span x-text="depthLimit * (helpText?.factor || 10) * selectedIds.length"></span>
+                </span>
+                <span class="text-slate-400 font-medium"> + Articles</span>
+              </div>
+
+              <p class="text-[10px] text-slate-400 mt-3 italic leading-tight">
+                * Note: Engine digs deeper to bypass duplicates; final yield may vary.
+              </p>
+            </div>
+
+          </div>
+
+          <div class="md:col-span-2 flex flex-col">
+            <label class="block text-gray-700 font-bold mb-2">2. Select Pending Categories</label>
+            <p class="text-sm text-gray-500 mb-3">Only categories with incomplete historical data are shown.</p>
+
+            <div class="flex flex-col gap-3 mb-4 shrink-0 md:flex-row md:gap-2">
+              <input type="text" x-model="search" placeholder="Quick find in pending categories..."
+                class="w-full md:flex-1 border p-2.5 rounded-md shadow-sm text-base" :disabled="!selectedSite">
+
+              <div class="flex gap-2 w-full md:w-auto">
+                <button type="button" @click="toggleVisible(true)" :disabled="!selectedSite"
+                  class="flex-1 md:flex-none bg-blue-50 text-blue-700 px-4 py-2.5 rounded-md hover:bg-blue-100 text-sm font-semibold disabled:opacity-50 border border-blue-200">
+                  Select Visible
+                </button>
+                <button type="button" @click="toggleVisible(false)" :disabled="!selectedSite"
+                  class="flex-1 md:flex-none bg-gray-50 text-gray-600 px-4 py-2.5 rounded-md hover:bg-gray-100 text-sm font-semibold disabled:opacity-50 border border-gray-200">
+                  Deselect
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="border rounded-md bg-gray-50 p-2 flex-grow flex flex-col min-h-[300px] max-h-[300px] overflow-hidden">
+              <template x-if="!selectedSite">
+                <div class="flex-grow flex items-center justify-center text-gray-400 italic">
+                  👈 Please select a website from the left first.
+                </div>
+              </template>
+
+              <div x-show="isLoading" class="flex-grow flex flex-col items-center justify-center py-10">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p class="mt-2 text-slate-400 text-sm">Fetching pending categories...</p>
+              </div>
+
+              <div x-show="selectedSite && !isLoading" class="overflow-y-auto w-full h-full pr-1">
+                <div class="grid grid-cols-1 gap-2">
+                  <template x-for="source in filteredSources" :key="source._id">
+                    <div
+                      class="flex items-center p-3 bg-white hover:bg-blue-50 rounded shadow-sm transition border border-gray-100">
+                      <input type="checkbox" name="sourceIds[]" :value="source._id" :id="'s_' + source._id"
+                        class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                        x-model="selectedIds">
+
+                      <label :for="'s_' + source._id"
+                        class="ml-3 cursor-pointer flex-1 flex justify-between items-center">
+                        <span class="text-gray-700 font-medium truncate" x-text="source.category"
+                          :title="source.category"></span>
+
+                        <span
+                          class="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold whitespace-nowrap ml-2">
+                          <span class="label font-medium" x-text="helpText?.backfillLabel"></span>:
+                          <span class="count font-bold text-blue-600" x-text="source.lastProcessedUnit"></span>
+                        </span>
+                      </label>
+                    </div>
+                  </template>
+                </div>
+
+                <template x-if="selectedSite && filteredSources.length === 0 && !isLoading">
+                  <div class="text-center py-10 text-green-600 font-medium">
+                    🎉 All categories for this site are fully backfilled!
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div class="flex justify-between items-center mt-3 px-1">
+              <p class="text-sm text-gray-500">
+                Selected: <span x-text="selectedIds.length" class="font-bold text-blue-600 text-base"></span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" :disabled="selectedIds.length === 0 || isTaskRunning()"
+            class="w-full bg-blue-600 text-white font-bold py-4 rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-lg shadow-md flex justify-center items-center gap-2">
+            <span x-show="!isTaskRunning()">⛏️ Start Backfill Excavation</span>
+            <span x-show="isTaskRunning()">⏳ Task in Progress...</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="bg-white shadow-lg rounded-lg p-6" x-data="taskMonitor()">
+      <div class="flex justify-between items-center mb-6 border-b pb-4">
+        <h2 class="text-xl font-bold text-gray-800">📡 Active Tasks Monitor</h2>
+        <button @click="fetchTasks()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+            </path>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div class="space-y-4">
+        <template x-if="tasks.length === 0">
+          <div class="text-center py-8 text-gray-400 italic bg-gray-50 rounded-lg border border-dashed border-gray-200">
+            No active tasks currently running.
+          </div>
+        </template>
+
+        <template x-for="task in tasks" :key="task._id">
+          <div class="border rounded-lg p-4 bg-gray-50 flex flex-col gap-4">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-gray-700" x-text="'Task: ' + task._id.substring(18)"></span>
+              <span :class="{
+          'bg-green-100 text-green-700': task.status === 'completed',
+          'bg-blue-100 text-blue-700': task.status === 'running',
+          'bg-red-100 text-red-700': task.status === 'failed',
+          'bg-gray-100 text-gray-700': task.status === 'stopped'
+        }" class="px-2 py-1 rounded text-xs font-bold" x-text="task.status"></span>
+            </div>
+            <div :id="'terminal-' + task._id" x-init="$nextTick(() => handleTaskConnection(task._id))"
+              style="background-color: #0c0c0c; color: #cccccc; padding: 15px; font-family: monospace; font-size: 12px; height: 300px; overflow-y: auto; border-radius: 4px;">
+            </div>
+
+            <div class="flex justify-end">
+              <template x-if="['running', 'pending'].includes(task.status)">
+                <button @click="stopTask(task._id)" class="text-red-600 text-sm font-bold hover:underline">
+                  Stop Task
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Script for the Setup Area
+    function crawlerManager() {
+      return {
+        selectedSite: '',      // 初始設為空字串，對應 select 的 value=""
+        search: '',
+        selectedIds: [],       // 這是唯一與 Checkbox x-model 綁定的數組
+        sources: [],
+        isLoading: false,
+        helpText: null,        // 預設為 null 以便判斷
+        depthLimit: 5,         // Default depth
+        selectedSite: '',
+
+
+        async fetchCategories() {
+          if (!this.selectedSite) {
+            this.sources = [];
+            this.selectedIds = [];
+            this.helpText = '';
+            return;
+          }
+          this.isLoading = true;
+          try {
+            // Fetch API updated to only return pending sources (see backend update below)
+            const response = await fetch(`/crawler/api/sources/${encodeURIComponent(this.selectedSite)}?pendingOnly=true`);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const data = await response.json();
+            this.sources = data.sources;
+            this.helpText = data.meta.helpText;
+            this.selectedIds = [];
+          } catch (error) {
+            console.error("Fetch error:", error);
+            alert("Failed to load categories.");
+          } finally {
+            this.isLoading = false;
+          }
+        },
+
+        get filteredSources() {
+          if (!this.search) return this.sources;
+          const term = this.search.toLowerCase();
+          return this.sources.filter(s => s.category.toLowerCase().includes(term));
+        },
+
+        toggleVisible(status) {
+          const visibleIds = this.filteredSources.map(s => s._id);
+          if (status) {
+            const newIds = visibleIds.filter(id => !this.selectedIds.includes(id));
+            this.selectedIds.push(...newIds);
+          } else {
+            this.selectedIds = this.selectedIds.filter(id => !visibleIds.includes(id));
+          }
+        }
+      }
+    }
+
+    function isTaskRunning() {
+      const monitor = document.querySelector('[x-data="taskMonitor()"]');
+      if (monitor && monitor.__x_data_stack) {
+        const activeTasks = monitor.__x_data_stack[0].tasks;
+        return activeTasks.some(t => t.status === 'running');
+      }
+      return false;
+    }
+
+    function taskMonitor() {
+      return {
+        tasks: [],
+        connectedTasks: new Set(),
+        ansiUp: null,
+        socket: null,
+
+        init() {
+          if (typeof AnsiUp !== 'undefined') {
+            this.ansiUp = new AnsiUp();
+            console.log("✅ AnsiUp Ready");
+          }
+          this.socket = io();
+          this.fetchTasks();
+          setInterval(() => this.fetchTasks(), 5000);
+        },
+
+        /**
+         * Establishes a socket connection to a specific task room and listens for incoming logs.
+         * @param {string} taskId - The unique ID of the task to monitor.
+         */
+        handleTaskConnection(taskId) {
+          // Prevent duplicate event listeners for the same task
+          if (this.connectedTasks.has(taskId)) return;
+          this.connectedTasks.add(taskId);
+
+          console.warn(`🔌 Connecting to task room: ${taskId}`);
+
+          // Inform the server that this client wants to join the specific task's log room
+          this.socket.emit('join_task', taskId);
+
+          /**
+           * Listen for 'task_log' events from the server.
+           * Data usually contains { taskId, message }.
+           */
+          this.socket.on('task_log', (data) => {
+            // Standardize the incoming data format
+            const message = (typeof data === 'object' && data.message) ? data.message : data;
+            const incomingId = (typeof data === 'object' && data.taskId) ? data.taskId : taskId;
+
+            // Security check: Ensure the log belongs to the current task UI
+            if (incomingId !== taskId) return;
+
+            console.log(`📥 Log received for task [${taskId.slice(-4)}]:`, message);
+
+            const terminal = document.getElementById(`terminal-${taskId}`);
+
+            // Update the terminal UI if the element exists and ansiUp is ready
+            if (terminal && this.ansiUp) {
+              // Clear the "Waiting" placeholder on first real message
+              if (terminal.innerText.includes('Waiting')) terminal.innerHTML = '';
+
+              const line = document.createElement('div');
+              line.className = 'mb-1 font-mono text-xs border-l-2 border-blue-500 pl-2';
+
+              // Convert ANSI color codes (from Chalk) to HTML span tags
+              const safeStr = (typeof message === 'string') ? message : JSON.stringify(message);
+              line.innerHTML = this.ansiUp.ansi_to_html(safeStr);
+
+              // Append new log and auto-scroll to the bottom
+              terminal.appendChild(line);
+              terminal.scrollTop = terminal.scrollHeight;
+            }
+          });
+        },
+
+        async fetchTasks() {
+          try {
+            const res = await fetch('/tasks/api/active');
+            if (res.ok) {
+              const allTasks = await res.json();
+              this.tasks = allTasks.filter(t => t.status === 'running');
+              this.tasks.forEach(task => {
+                if (task.status === 'running') {
+                  this.handleTaskConnection(task._id);
+                }
+              });
+            }
+          } catch (e) { console.error("Fetch Tasks Failed", e); }
+        }
+      }
+    }
+  </script>
+  <%- include('partials/footer.ejs') %>
