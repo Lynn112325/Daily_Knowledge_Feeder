@@ -1,35 +1,40 @@
 const { getIO } = require('./socket');
-const Task = require('../models/Task'); const { taskContext } = require('./context');
+const Task = require('../models/Task');
+const { taskContext } = require('./context');
 
 /**
- * 核心日誌工具：發送到 Console、Socket 和資料庫
+ * Core logging utility: Sends logs to Console, Socket.io, and MongoDB
+ * @param {string} message - The log string to broadcast
  */
 async function logToUI(message = "") {
-    // 輸出到系統終端
+    // 1. Output to local terminal
     console.log(message);
-    const store = taskContext.getStore(); // 從口袋拿資料
+
+    // 2. Retrieve current taskId from AsyncLocalStorage (taskContext)
+    const store = taskContext.getStore();
     const taskId = store?.taskId;
 
     try {
-        // 獲取 Socket 實例並發送
         const io = getIO();
 
-        // 建議發送物件格式，包含 taskId，方便前端 Alpine.js 過濾
+        // 3. Broadcast to Socket.io room (supports real-time UI updates)
+        // We wrap it in an object for easier frontend filtering/parsing
         io.to(`task_${taskId}`).emit('task_log', {
             taskId: taskId,
             message: message
         });
 
-        // 關鍵節點存入資料庫
+        // 4. Save persistence logs to Database for critical nodes
+        // Only saves key status indicators to avoid bloating DB
         if (message.includes('✅') || message.includes('📍') || message.includes('❌')) {
             await Task.findByIdAndUpdate(taskId, {
                 $push: {
-                    logs: { $each: [message], $slice: -200 }
+                    logs: { $each: [message], $slice: -200 } // Keep only the last 200 logs
                 }
             });
         }
     } catch (err) {
-        // 防止 Socket 未初始化導致爬蟲崩潰
+        // Log error but don't crash the main crawler process
         console.error("LogToUI Error:", err.message);
     }
 }
