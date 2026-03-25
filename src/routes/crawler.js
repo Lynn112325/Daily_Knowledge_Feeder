@@ -6,22 +6,28 @@ const { handleIncremental, handleBackfill } = require('../lib/crawlerService');
 const STRATEGIES = require('../config/strategies');
 const globalConfig = require('../config/global');
 
-// Display mapping for different crawling mechanisms
+// Display mapping for manual excavation mechanisms
 const labels = {
     'SINGLE_PAGE_API': {
-        title: 'Fetch [ 10 ] items per category',
-        unit: 'items',
-        backfillLabel: 'Data retrieved'
+        title: '⛏️ Excavation Batch Size',
+        unit: 'batches',
+        factor: 10, // 1 unit = 10 items
+        backfillLabel: 'Excavated Batches',
+        description: 'Retrieves history using API windows. Each batch targets ~10 articles.'
     },
     'INFINITE_SCROLL': {
-        title: 'Scroll [ 10 ] times for more',
+        title: '🖱️ Scroll Depth',
         unit: 'scrolls',
-        backfillLabel: 'Scroll depth'
+        factor: 15, // 1 scroll = ~15 items
+        backfillLabel: 'Scroll Depth',
+        description: 'Simulates page scrolls. Each scroll usually uncovers ~15 articles.'
     },
     'PAGINATION': {
-        title: 'Go back [ 10 ] pages',
+        title: '📄 Page History Depth',
         unit: 'pages',
-        backfillLabel: 'History depth'
+        factor: 20, // 1 page = ~20 items
+        backfillLabel: 'Pages Unearthed',
+        description: 'Moves back through archival pages. Each page yields ~20 articles.'
     },
 }
 
@@ -43,7 +49,9 @@ router.get('/', async (req, res) => {
 router.get('/backfill', async (req, res) => {
     try {
         const sites = await Source.distinct('siteName');
+
         res.render('crawlerConfig', {
+            task: null,
             sites,
             title: 'Deep Dive',
             breadcrumbs: [
@@ -66,10 +74,10 @@ router.post('/start', async (req, res) => {
         // For backfill, target is calculated by batch size
         totalTarget = globalConfig.BATCH_SIZE * (sourceIds.length * limit);
     }
-
+    console.log(siteName);
     // Register the task in DB before execution
     const task = await Task.create({
-        name: `${crawlMode.toUpperCase()}: ${siteName}`,
+        name: siteName,
         crawlMode: crawlMode,
         status: 'pending',
         totalTarget: totalTarget
