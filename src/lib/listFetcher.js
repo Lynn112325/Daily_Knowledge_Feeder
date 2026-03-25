@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const chalk = require('chalk');
+const { logToUI } = require('./emitLog');
 
 /**
  * Generic list scraper
@@ -15,7 +16,7 @@ async function getList(listUrl, config, userAgent) {
             headers: {
                 'User-Agent': userAgent,
                 // Add Referer to bypass basic anti-scraping checks
-                'Referer': 'https://www.sciencedaily.com/'
+                'Referer': config.baseUrl
             },
             // Set a 10-second limit before timing out
             timeout: 10000
@@ -78,9 +79,9 @@ async function getList(listUrl, config, userAgent) {
 
         // Log the outcome of the search
         if (result.length > 0) {
-            console.log(chalk.gray(`      🔎 ListFetcher found ${result.length} valid links.`));
+            await logToUI(chalk.gray(`      🔎 ListFetcher found ${result.length} valid links.`));
         } else {
-            console.log(chalk.yellow(`      ⚠️ ListFetcher: No valid links found at ${listUrl}`));
+            await logToUI(chalk.yellow(`      ⚠️ ListFetcher: No valid links found at ${listUrl}`));
         }
 
         return result;
@@ -88,9 +89,9 @@ async function getList(listUrl, config, userAgent) {
     } catch (error) {
         // Handle server-side (4xx/5xx) or general network errors
         if (error.response) {
-            console.error(chalk.red(`❌ Server Error [${error.response.status}] at ${listUrl}`));
+            await logToUI(chalk.red(`❌ Server Error [${error.response.status}] at ${listUrl}`));
         } else {
-            console.error(chalk.red(`❌ Network Error: ${error.message}`));
+            await logToUI(chalk.red(`❌ Network Error: ${error.message}`));
         }
         return [];
     }

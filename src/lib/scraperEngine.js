@@ -2,6 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const chalk = require('chalk');
 const TurndownService = require('turndown');
+const { logToUI } = require('./emitLog');
 
 // --- Turndown Configuration ---
 // Converts HTML to clean Markdown
@@ -58,7 +59,7 @@ async function scrapeArticle(url, strategy, userAgent) {
         const $ = cheerio.load(data);
 
         // 2. Extract Data: Run the site-specific strategy
-        console.log(chalk.blue(`Executing strategy: ${strategy.name}...`));
+        await logToUI(chalk.blue(`Executing strategy: ${strategy.name}...`));
         const extractedData = strategy.extract($);
 
         // 3. HTML to Markdown: Convert the main content body
@@ -75,7 +76,7 @@ async function scrapeArticle(url, strategy, userAgent) {
         };
 
     } catch (error) {
-        console.error(chalk.red(`❌ Scrape failed [${url}]: ${error.message}`));
+        await logToUI(chalk.red(`❌ Scrape failed [${url}]: ${error.message}`));
         return null;
     }
 }

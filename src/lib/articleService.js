@@ -1,6 +1,7 @@
 const chalk = require('chalk');
 const Article = require('../models/Article');
 const { annotateMarkdown } = require('./dictionaryService');
+const { logToUI } = require('./emitLog');
 
 /**
  * Processes and saves article data to MongoDB.
@@ -51,16 +52,16 @@ async function saveToDatabase(articleData) {
         );
 
         if (result) {
-            console.log(chalk.bold.green(`✅ Article Saved to DB: ${articlePayload.title}`));
+            await logToUI(chalk.bold.green(`✅ Article Saved to DB: ${articlePayload.title}`));
             return result._id;
         }
 
     } catch (error) {
         // Handle MongoDB duplicate key error (code 11000)
         if (error.code === 11000) {
-            console.warn(chalk.yellow(`⚠️ Duplicate article skipped: ${articleData.title}`));
+            await logToUI(chalk.yellow(`⚠️ Duplicate article skipped: ${articleData.title}`));
         } else {
-            console.error(chalk.red(`❌ DB Save Error: ${error.message}`));
+            await logToUI(chalk.red(`❌ DB Save Error: ${error.message}`));
         }
         throw error;
     }

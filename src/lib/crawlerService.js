@@ -6,6 +6,8 @@ const { getList } = require('./listFetcher'); // Engine to get a list of URLs fr
 const globalConfig = require('../config/global'); // Global settings like User-Agent
 const STRATEGIES = require('../config/strategies'); // Site-specific selectors and rules
 const { saveToDatabase } = require('./articleService'); // Function to save data to MongoDB
+const { logToUI } = require('./emitLog');
+const { taskContext } = require('./context');
 
 // --- DATABASE MODELS ---
 const Source = require('../models/Source');
@@ -39,7 +41,7 @@ async function checkRobotsWithCache(url, userAgent) {
 async function isTaskStopped(taskId) {
     const task = await Task.findById(taskId).select('status');
     if (!task || task.status === 'stopped') {
-        console.log(chalk.bgRed.white(` 🛑 STOP SIGNAL: Task #${taskId} terminated by user. `));
+        await logToUI(chalk.bgRed.white(` 🛑 STOP SIGNAL: Task #${taskId} terminated by user. `));
         return true;
     }
     return false;
@@ -55,7 +57,7 @@ async function handleCategoryOverlap(urls, currentCategory) {
         { $addToSet: { category: currentCategory } } // Adds to array only if not already present
     );
     if (result.modifiedCount > 0) {
-        console.log(chalk.blue(`      🏷️  Overlap: Updated ${result.modifiedCount} articles with new category [${currentCategory}]`));
+        await logToUI(chalk.blue(`      🏷️  Overlap: Updated ${result.modifiedCount} articles with new category [${currentCategory}]`));
     }
     return result.modifiedCount;
 }
@@ -65,55 +67,65 @@ async function handleCategoryOverlap(urls, currentCategory) {
  */
 const BACKFILL_HANDLERS = {
     /**
-     * Scenario A: Site returns a single large URL list (e.g., XML/JSON API)
-     * Logic: Slice the full list into batches based on depthLimit and BATCH_SIZE
+     * SINGLE_PAGE_API: Processes a large flat list using a sliding window.
+     * Logic: Continues slicing batches until the desiredNewCount is met or URLs are exhausted.
+     * This ensures the task doesn't stop early just because the first batches contained duplicates.
      */
     'SINGLE_PAGE_API': async (source, strategy, depthLimit, taskId, stats) => {
         const base = source.baseUrl.replace(/\/$/, "");
         const apiUrl = strategy.listConfig.buildApiUrl(base, source.path);
 
-        // Fetch the entire historical URL list once
         const allUrls = await getList(apiUrl, strategy.listConfig, globalConfig.USER_AGENT);
         if (!allUrls?.length) {
             source.isBackfillCompleted = true;
             return;
         }
 
-        // Calculate offset: lastProcessedUnit tracks how many BATCH_SIZE blocks were finished
-        const startIndex = (source.lastProcessedUnit - 1) * globalConfig.BATCH_SIZE;
-        // endIndex is determined by how many additional batches the user requested (depthLimit)
-        const endIndex = Math.min(startIndex + (depthLimit * globalConfig.BATCH_SIZE), allUrls.length);
-        const targetUrls = allUrls.slice(startIndex, endIndex);
+        const desiredNewCount = depthLimit * globalConfig.BATCH_SIZE;
+        let totalSavedForThisSource = 0;
 
-        await processUrlList(targetUrls, source, strategy, taskId, stats);
+        // Keep sliding the window deeper into the array until quota is reached
+        while (totalSavedForThisSource < desiredNewCount) {
+            if (await isTaskStopped(taskId)) break;
 
-        // Advance the progress unit (batch count) based on actual processed items
-        source.lastProcessedUnit += Math.ceil(targetUrls.length / globalConfig.BATCH_SIZE);
+            const startIndex = (source.lastProcessedUnit - 1) * globalConfig.BATCH_SIZE;
+            if (startIndex >= allUrls.length) {
+                await logToUI(chalk.bgCyan.black(' 🏁 REACHED THE END OF URL ARRAY '));
+                source.isBackfillCompleted = true;
+                break;
+            }
 
-        console.log(chalk.magenta(
-            `📍 Depth: [Batch ${source.lastProcessedUnit}] | ` +
-            `Range: ${startIndex + 1}-${endIndex} of ${allUrls.length} | `
-        ));
+            const endIndex = Math.min(startIndex + globalConfig.BATCH_SIZE, allUrls.length);
+            const targetUrls = allUrls.slice(startIndex, endIndex);
 
-        // Mark as completed if we reached the end of the array
-        if (endIndex >= allUrls.length) {
-            source.isBackfillCompleted = true;
+            // Process and get the count of actually newly saved articles
+            const { status, savedCount } = await processUrlList(targetUrls, source, strategy, taskId, stats);
+
+            totalSavedForThisSource += savedCount;
+            source.lastProcessedUnit += 1; // Increment unit regardless of content to move cursor forward
+
+            await logToUI(chalk.magenta(
+                `📍 Progress: ${totalSavedForThisSource}/${desiredNewCount} | ` +
+                `Batch ${source.lastProcessedUnit} | Range: ${startIndex + 1}-${endIndex}`
+            ));
+
+            if (status === 'STOPPED') break;
+            if (savedCount === 0) {
+                await logToUI(chalk.gray(`      ⏭️  Batch ${source.lastProcessedUnit} all duplicates, searching deeper...`));
+            }
         }
     },
 
     /**
-     * Scenario B: Traditional page-by-page navigation
-     * Logic: Loop through a sequence of pages starting from the last checkpoint
+     * PAGINATION: Traditional page-by-page scraping.
+     * Logic: Skips "empty" pages (all duplicates) without consuming the depthLimit quota.
+     * Guaranteed to attempt finding 'depthLimit' worth of pages with new content.
      */
     'PAGINATION': async (source, strategy, depthLimit, taskId, stats) => {
-        const base = source.baseUrl.replace(/\/$/, "");
         let currentPage = source.lastProcessedUnit || 1;
+        let pagesWithNewContent = 0;
 
-        // Estimate total target (assuming ~20 items per page) for UI progress bar
-        await Task.findByIdAndUpdate(taskId, { totalTarget: depthLimit * 20 });
-
-        // Iterate through pages up to the requested depthLimit
-        for (let p = 0; p < depthLimit; p++) {
+        while (pagesWithNewContent < depthLimit) {
             if (await isTaskStopped(taskId)) break;
 
             const pageUrl = strategy.listConfig.buildPageUrl
@@ -122,21 +134,25 @@ const BACKFILL_HANDLERS = {
 
             const urls = await getList(pageUrl, strategy.listConfig, globalConfig.USER_AGENT);
 
-            // If page is empty, we have reached the end of the history
             if (!urls?.length) {
                 source.isBackfillCompleted = true;
                 break;
             }
 
-            const result = await processUrlList(urls, source, strategy, taskId, stats);
-            if (result === 'STOPPED') break;
+            const { status, savedCount } = await processUrlList(urls, source, strategy, taskId, stats);
 
-            // Save checkpoint after every successful page
+            // Only count towards depthLimit if the page actually contributed new data
+            if (savedCount > 0) {
+                pagesWithNewContent++;
+            } else {
+                await logToUI(chalk.gray(`      ⏭️  Page ${currentPage} has no new content, skipping...`));
+            }
+
             currentPage++;
             source.lastProcessedUnit = currentPage;
             await source.save();
 
-            // Throttling to prevent IP blocks
+            if (status === 'STOPPED') break;
             await sleep(3000);
         }
     }
@@ -158,7 +174,7 @@ async function scrapeWithRetry(url, strategy, maxRetries = 3) {
 
             if (isNetworkError && i < maxRetries - 1) {
                 const delay = (i + 1) * 5000; // Increase wait time: 5s, then 10s
-                console.log(chalk.yellow(`      ⚠️  Network Issue. Retrying in ${delay / 1000}s... (Attempt ${i + 1}/${maxRetries})`));
+                await logToUI(chalk.yellow(`      ⚠️  Network Issue. Retrying in ${delay / 1000}s... (Attempt ${i + 1}/${maxRetries})`));
                 await sleep(delay);
                 continue;
             }
@@ -179,12 +195,13 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
     const existing = await Article.find({ originalUrl: { $in: urls } }).select('originalUrl');
     const existingSet = new Set(existing.map(a => a.originalUrl));
     const newUrls = urls.filter(u => !existingSet.has(u));
+    let savedInThisBatch = 0;
 
-    console.log(chalk.gray(`      📊 Page analysis: ${urls.length} total, ${newUrls.length} new to scrape.`));
+    await logToUI(chalk.gray(`      📊 Page analysis: ${urls.length} total, ${newUrls.length} new to scrape.`));
 
     // If no new articles found, mark this category as finished
     if (newUrls.length === 0) {
-        console.log(chalk.green(`   ✨ No new historical articles. Category Backfilled!`));
+        await logToUI(chalk.green(`   ✨ No new historical articles. Category Backfilled!`));
         await source.save();
     }
 
@@ -196,7 +213,7 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
             // 2. Respect Robots.txt rules
             const { allowed, crawlDelay } = await checkRobotsWithCache(url, globalConfig.USER_AGENT);
             if (!allowed) {
-                console.log(chalk.yellow(`      🚫 Skipped (Robots.txt): ${url.substring(0, 50)}...`));
+                await logToUI(chalk.yellow(`      🚫 Skipped (Robots.txt): ${url.substring(0, 50)}...`));
                 continue;
             }
 
@@ -215,12 +232,13 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
                     category: source.category,
                     sourceId: source._id
                 });
+                savedInThisBatch++;
                 stats.successCount++;
-                console.log(chalk.green(`      ✅ Saved: ${detail.title.substring(0, 40)}...`));
+                await logToUI(chalk.green(`      ✅ Saved: ${detail.title.substring(0, 40)}...`));
             }
         } catch (err) {
             stats.failCount++;
-            console.error(chalk.red(`      ❌ Article Permanent Failure [${url}]: ${err.message}`));
+            await logToUI(chalk.red(`      ❌ Article Permanent Failure [${url}]: ${err.message}`));
         } finally {
             // Always update progress in the Task DB for the UI to see
             stats.totalProcessed++;
@@ -230,8 +248,7 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
                 failCount: stats.failCount
             });
         }
-    }
-    return 'CONTINUE';
+    } return { status: 'CONTINUE', savedCount: savedInThisBatch };
 }
 
 /**
@@ -240,43 +257,45 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
  */
 async function handleIncremental(sourceIds, limitPerCategory, taskId) {
     const stats = { totalProcessed: 0, successCount: 0, failCount: 0 };
-    console.log(chalk.bold.yellow(`\n🚀 [ENGINE: INCREMENTAL] Task #${taskId} started.`));
+    await logToUI(chalk.bold.yellow(`\n🚀 [ENGINE: INCREMENTAL] Task #${taskId} started.`));
 
     robotsCache.clear();
 
-    try {
-        await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
+    return taskContext.run({ taskId }, async () => {
+        try {
+            await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
 
-        for (const sourceId of sourceIds) {
-            if (await isTaskStopped(taskId)) break;
+            for (const sourceId of sourceIds) {
+                if (await isTaskStopped(taskId)) break;
 
-            const source = await Source.findById(sourceId);
-            const strategy = STRATEGIES[source.strategyKey];
-            const fullListUrl = new URL(source.path, source.baseUrl).href;
+                const source = await Source.findById(sourceId);
+                const strategy = STRATEGIES[source.strategyKey];
+                const fullListUrl = new URL(source.path, source.baseUrl).href;
 
-            console.log(chalk.blue(`\n📂 Category: ${source.category}`));
-            // Fetch list of URLs from the first page
-            const allUrls = await getList(fullListUrl, strategy.listConfig, globalConfig.USER_AGENT);
+                await logToUI(chalk.blue(`\n📂 Category: ${source.category}`));
+                // Fetch list of URLs from the first page
+                const allUrls = await getList(fullListUrl, strategy.listConfig, globalConfig.USER_AGENT);
 
-            if (!allUrls?.length) continue;
+                if (!allUrls?.length) continue;
 
-            // Only process up to the limit set by the user
-            const targetUrls = allUrls.slice(0, limitPerCategory);
-            const result = await processUrlList(targetUrls, source, strategy, taskId, stats);
+                // Only process up to the limit set by the user
+                const targetUrls = allUrls.slice(0, limitPerCategory);
+                const result = await processUrlList(targetUrls, source, strategy, taskId, stats);
 
-            if (result === 'STOPPED') break;
-            // Record that this source was checked today
-            await Source.findByIdAndUpdate(sourceId, { lastCrawledAt: new Date() });
+                if (result === 'STOPPED') break;
+                // Record that this source was checked today
+                await Source.findByIdAndUpdate(sourceId, { lastCrawledAt: new Date() });
+            }
+
+            const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
+            await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
+            await logToUI(chalk.bold.green(`\n🏁 Incremental Task Finished.`));
+
+        } catch (err) {
+            await logToUI(chalk.bgRed(" ENGINE CRASH "), err);
+            await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
         }
-
-        const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
-        await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
-        console.log(chalk.bold.green(`\n🏁 Incremental Task Finished.`));
-
-    } catch (err) {
-        console.error(chalk.bgRed(" ENGINE CRASH "), err);
-        await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
-    }
+    });
 }
 
 /**
@@ -287,34 +306,37 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
     const stats = { totalProcessed: 0, successCount: 0, failCount: 0 };
     robotsCache.clear();
 
-    try {
-        await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
+    return taskContext.run({ taskId }, async () => {
 
-        for (const sourceId of sourceIds) {
-            if (await isTaskStopped(taskId)) break;
+        try {
+            await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
+            for (const sourceId of sourceIds) {
+                if (await isTaskStopped(taskId)) break;
 
-            const source = await Source.findById(sourceId);
-            const strategy = STRATEGIES[source.strategyKey];
-            const type = strategy.listConfig.backfillType || 'PAGINATION';
+                const source = await Source.findById(sourceId);
+                const strategy = STRATEGIES[source.strategyKey];
+                const type = strategy.listConfig.backfillType || 'PAGINATION';
 
-            const handler = BACKFILL_HANDLERS[type];
-            if (handler) {
-                console.log(chalk.yellow(`\n📂 [${type}] Processing: ${source.category}`));
-                await handler(source, strategy, depthLimit, taskId, stats);
-                await source.save();
-            } else {
-                console.warn(chalk.red(`No handler for backfill type: ${type}`));
+                const handler = BACKFILL_HANDLERS[type];
+                if (handler) {
+                    await logToUI(chalk.yellow(`\n📂 [${type}] Processing: ${source.category}`));
+                    await handler(source, strategy, depthLimit, taskId, stats);
+                    await source.save();
+                } else {
+                    await logToUI(chalk.red(`No handler for backfill type: ${type}`));
+                }
             }
+
+            const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
+            await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
+            await logToUI(chalk.bold.green(`\n🏁 Backfill Task Ended as [${finalStatus}].`));
+
+
+        } catch (err) {
+            await logToUI(chalk.bgRed(" BACKFILL CRASH "), err);
+            await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
         }
-
-        const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
-        await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
-        console.log(chalk.bold.green(`\n🏁 Backfill Task Ended as [${finalStatus}].`));
-
-    } catch (err) {
-        console.error(chalk.bgRed(" BACKFILL CRASH "), err);
-        await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
-    }
+    });
 }
 
 /**
