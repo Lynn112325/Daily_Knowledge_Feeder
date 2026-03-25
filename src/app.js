@@ -1,7 +1,9 @@
 const express = require('express');
 const path = require('path');
 const chalk = require('chalk');
+const http = require('http'); // Required to wrap express app for Socket.io
 const connectDB = require('./config/db');
+const socketModule = require('../src/lib/socket');
 
 // --- Route Modules ---
 const indexRoutes = require('./routes/index');
@@ -11,25 +13,50 @@ const taskRoutes = require('./routes/tasks');
 const apiRoutes = require('./routes/api');
 
 const app = express();
+/**
+ * Create an HTTP server instance.
+ * Socket.io requires a raw HTTP server to attach its listeners.
+ */
+const server = http.createServer(app);
 
-// Initialize Database
-connectDB();
+/**
+ * Initialize Socket.io and attach it to the server.
+ * The 'io' instance is initialized here and can be accessed via socketModule.getIO() elsewhere.
+ */
+socketModule.init(server);
 
-// --- Middleware & View Engine ---
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-app.set('views', path.join(__dirname, 'views')); // Set views directory
-app.set('view engine', 'ejs'); // Set template engine
+// --- Database Connection ---
+connectDB(); // Establishes connection to MongoDB
+
+// --- Middleware & View Engine Setup ---
+app.use(express.json()); // Middleware to parse JSON request bodies
+app.use(express.urlencoded({ extended: true })); // Middleware to parse URL-encoded form data
+app.set('views', path.join(__dirname, 'views')); // Set the directory for EJS templates
+app.set('view engine', 'ejs'); // Set EJS as the template engine
+
+// --- Static Files ---
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static assets (CSS, JS, Images)
 
 // --- Route Mounting ---
-app.use('/', indexRoutes);            // Dashboard & Home
-app.use('/crawler', crawlerRoutes);    // Crawler management
-app.use('/articles', articleRoutes);   // Article management
-app.use('/tasks', taskRoutes);         // Task scheduling
-app.use('/api', apiRoutes);            // API utilities
+app.use('/', indexRoutes);             // Dashboard, home, and general navigation
+app.use('/crawler', crawlerRoutes);    // Crawler controls and backfill logic
+app.use('/articles', articleRoutes);   // Article listing, searching, and viewing
+app.use('/tasks', taskRoutes);         // Task status API and log retrieval
+app.use('/api', apiRoutes);            // Internal API utilities
+
+// --- Error Handling (Optional but recommended) ---
+app.use((err, req, res, next) => {
+    console.error(chalk.red('System Error:'), err.stack);
+    res.status(500).send('Something broke!');
+});
 
 // --- Server Startup ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+/**
+ * Start the server using 'server.listen' instead of 'app.listen'
+ * to ensure Socket.io functionality is active.
+ */
+server.listen(PORT, () => {
     console.log(chalk.cyan(`🚀 Server running at: http://localhost:${PORT}`));
+    console.log(chalk.magenta(`🔌 Socket.io engine initialized and ready.`));
 });
