@@ -27,26 +27,28 @@
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                 <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Articles</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= articles.length %>
+                    <%= totalArticles %>
                 </p>
             </div>
+
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Unread</p>
+                <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Read</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= articles.filter(a=> !a.isRead).length %>
+                    <%= readCount %>
                 </p>
             </div>
+
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                 <p class="text-xs font-bold text-emerald-500 uppercase tracking-wider">Today Added</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= articles.filter(a=> a.createdAt && new Date(a.createdAt).toDateString() === new
-                        Date().toDateString()).length %>
+                    <%= todayCount %>
                 </p>
             </div>
+
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                 <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Categories</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= [...new Set(articles.map(a=> a.category))].length %>
+                    <%= categoryCount %>
                 </p>
             </div>
         </div>
@@ -202,6 +204,50 @@
                         <% }) %>
                 </tbody>
             </table>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing <span class="font-medium">
+                        <%= (currentPage - 1) * limit + 1 %>
+                    </span>
+                    to <span class="font-medium">
+                        <%= Math.min(currentPage * limit, totalArticles) %>
+                    </span>
+                    of <span class="font-medium text-slate-800">
+                        <%= totalArticles %>
+                    </span> articles
+                </div>
+
+                <div class="inline-flex shadow-sm rounded-md" role="group">
+                    <% if (currentPage> 1) { %>
+                        <a href="?page=<%= currentPage - 1 %>&limit=<%= limit %>"
+                            class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-l-lg hover:bg-slate-50">
+                            Previous
+                        </a>
+                        <% } else { %>
+                            <button disabled
+                                class="px-4 py-2 text-sm font-medium text-slate-300 bg-white border border-slate-200 rounded-l-lg cursor-not-allowed">
+                                Previous
+                            </button>
+                            <% } %>
+
+                                <div
+                                    class="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border-t border-b border-slate-200">
+                                    Page <%= currentPage %> of <%= totalPages %>
+                                </div>
+
+                                <% if (currentPage < totalPages) { %>
+                                    <a href="?page=<%= currentPage + 1 %>&limit=<%= limit %>"
+                                        class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-r-lg hover:bg-slate-50">
+                                        Next
+                                    </a>
+                                    <% } else { %>
+                                        <button disabled
+                                            class="px-4 py-2 text-sm font-medium text-slate-300 bg-white border border-slate-200 rounded-r-lg cursor-not-allowed">
+                                            Next
+                                        </button>
+                                        <% } %>
+                </div>
+            </div>
         </div>
     </div>
 
