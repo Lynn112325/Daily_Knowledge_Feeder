@@ -129,9 +129,19 @@ async function getCleanTranslation(translation) {
 async function annotateMarkdown(text) {
     // 1. Guard clause: Return early if text is empty
     if (!text) return text;
+    const placeholders = [];
+    // 保護 圖片 ![alt](url)、連結 [text](url)、以及代碼塊 `code`
+    // 這個正則會匹配這些區塊並暫時存入 placeholders 陣列
+    const protectedText = text.replace(/(!?\[.*?\]\(.*?\))|(`.*?`)/g, (match) => {
+        const id = `__PROTECTED_${placeholders.length}__`;
+        placeholders.push(match);
+        return id;
+    });
 
+    // --- 2. 提取階段：只從「非保護區」提取單字 ---
+    const words = Array.from(new Set(protectedText.match(/\b[a-zA-Z]{3,}\b/g) || []));
     // 2. Extraction: Identify unique English words (3+ characters) to avoid redundant lookups
-    const words = Array.from(new Set(text.match(/\b[a-zA-Z]{3,}\b/g) || []));
+    // const words = Array.from(new Set(text.match(/\b[a-zA-Z]{3,}\b/g) || []));
 
     // 3. Storage: Initialize a Map to store word-to-translation pairs
     const annotationMap = new Map();
@@ -145,11 +155,14 @@ async function annotateMarkdown(text) {
         }
     }));
 
-    // 5. Transformation: Replace words with "Word ==(Translation)==" format using the Map
-    return text.replace(/\b[a-zA-Z]{3,}\b/g, (word) => {
+    let annotatedText = protectedText.replace(/\b[a-zA-Z]{3,}\b/g, (word) => {
         const ann = annotationMap.get(word);
-        // If an annotation exists in our Map, wrap it; otherwise, return the original word
         return ann ? `${word} ==(${ann})==` : word;
+    });
+
+    // --- 5. 還原階段：把佔位符換回原始的 Markdown ---
+    return annotatedText.replace(/__PROTECTED_(\d+)__/g, (match, index) => {
+        return placeholders[parseInt(index)];
     });
 }
 
