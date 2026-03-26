@@ -8,7 +8,17 @@
                 <p class="text-sm text-slate-500">Explore and manage your collected knowledge base.</p>
             </div>
 
-            <div class="flex items-center gap-3">
+            <form action="/articles" method="GET" class="flex items-center gap-3">
+                <select name="category" onchange="this.form.submit()"
+                    class="bg-white border border-slate-200 rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <option value="All">All Categories</option>
+                    <% allCategories.forEach(cat=> { %>
+                        <option value="<%= cat %>" <%=selectedCategory===cat ? 'selected' : '' %>>
+                            <%= cat %>
+                        </option>
+                        <% }) %>
+                </select>
+
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -16,11 +26,13 @@
                                 stroke-linejoin="round" stroke-width="2"></path>
                         </svg>
                     </span>
-                    <input type="text" x-model="searchQuery" placeholder="Search titles or categories..."
+                    <input type="text" name="q" value="<%= searchQuery %>" placeholder="Search titles..."
                         class="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none w-64">
                 </div>
 
-            </div>
+                <button type="submit" class="hidden">Search</button>
+            </form>
+
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -219,7 +231,7 @@
 
                 <div class="inline-flex shadow-sm rounded-md" role="group">
                     <% if (currentPage> 1) { %>
-                        <a href="?page=<%= currentPage - 1 %>&limit=<%= limit %>"
+                        <a href="?page=<%= currentPage - 1 %>&limit=<%= limit %>&q=<%= searchQuery %>&category=<%= selectedCategory %>"
                             class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-l-lg hover:bg-slate-50">
                             Previous
                         </a>
@@ -236,7 +248,7 @@
                                 </div>
 
                                 <% if (currentPage < totalPages) { %>
-                                    <a href="?page=<%= currentPage + 1 %>&limit=<%= limit %>"
+                                    <a href="?page=<%= currentPage + 1 %>&limit=<%= limit %>&q=<%= searchQuery %>&category=<%= selectedCategory %>"
                                         class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-r-lg hover:bg-slate-50">
                                         Next
                                     </a>

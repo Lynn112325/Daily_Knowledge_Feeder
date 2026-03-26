@@ -9,34 +9,48 @@ const MarkdownService = require('../services/markdownService');
  */
 router.get('/', async (req, res) => {
     try {
-        // Pagination logic: current page and records per page
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        // Parallel execution: fetch list and aggregate counts for efficiency
-        const [articles, totalArticles, readArticlesCount, todayArticlesCount, categories] = await Promise.all([
-            Article.find().sort({ originalDate: -1 }).skip(skip).limit(limit),
-            Article.countDocuments(),
+        // 1. Get search params from URL
+        const { q, category } = req.query;
+        let queryFilter = {};
+
+        // 2. Build Mongoose query
+        if (q) {
+            queryFilter.title = { $regex: q, $options: 'i' }; // Case-insensitive search
+        }
+        if (category && category !== 'All') {
+            queryFilter.category = category; // Mongoose matches item in array automatically
+        }
+
+        // 3. Parallel execution (Important: countDocuments must use queryFilter)
+        const [articles, filteredCount, readArticlesCount, todayArticlesCount, allCategories] = await Promise.all([
+            Article.find(queryFilter).sort({ originalDate: -1 }).skip(skip).limit(limit),
+            Article.countDocuments(queryFilter), // Current search result count
             Article.countDocuments({ isRead: true }),
             Article.countDocuments({
                 createdAt: { $gte: new Date().setHours(0, 0, 0, 0) }
             }),
-            Article.distinct('category')
+            Article.distinct('category') // Still need this for the dropdown list
         ]);
 
-        const totalPages = Math.ceil(totalArticles / limit);
+        const totalPages = Math.ceil(filteredCount / limit);
 
         res.render('articleList', {
             articles,
-            totalArticles,
+            totalArticles: filteredCount, // Return filtered total for pagination
             readCount: readArticlesCount,
             todayCount: todayArticlesCount,
-            categoryCount: categories.length,
+            categoryCount: allCategories.length,
+            allCategories, // Pass categories to populate select dropdown
             currentPage: page,
             totalPages,
             limit,
-            title: 'All Articles',
+            searchQuery: q || '', // Send back to keep input state
+            selectedCategory: category || 'All',
+            title: 'Articles',
             breadcrumbs: [{ name: 'Articles', url: '/articles' }, { name: 'List' }]
         });
     } catch (err) {
