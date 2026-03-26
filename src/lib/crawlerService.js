@@ -321,6 +321,9 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
                 if (handler) {
                     await logToUI(chalk.yellow(`\n📂 [${type}] Processing: ${source.category}`));
                     await handler(source, strategy, depthLimit, taskId, stats);
+                    await Source.findByIdAndUpdate(sourceId, {
+                        lastCrawledAt: new Date()
+                    });
                     await source.save();
                 } else {
                     await logToUI(chalk.red(`No handler for backfill type: ${type}`));
