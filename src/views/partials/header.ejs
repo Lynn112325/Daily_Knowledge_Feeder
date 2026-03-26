@@ -9,11 +9,47 @@
     </title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- css style -->
     <style>
         [x-cloak] {
             display: none !important;
         }
+
+        .vditor-reset {
+            font-family: "JetBrains Mono", "Fira Code", "Menlo", "Consolas", "Courier New", monospace !important;
+            line-height: 1.6;
+        }
+
+        .vditor-reset code,
+        .vditor-reset kbd,
+        .vditor-reset pre {
+            font-family: "JetBrains Mono", "Consolas", monospace !important;
+            letter-spacing: -0.5px;
+        }
+
+        .vditor-ir__node--expand {
+            font-variant-ligatures: none;
+        }
+
+        #tooltip {
+            position: fixed;
+            display: none;
+            z-index: 10000;
+
+            min-width: 180px;
+            max-width: 300px;
+            padding: 12px;
+            background-color: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(4px);
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
     </style>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/ansi_up@5.2.1/ansi_up.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -21,7 +57,6 @@
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vditor/dist/index.css" />
         <script src="https://cdn.jsdelivr.net/npm/vditor/dist/index.min.js"></script>
         <% } %>
-
 </head>
 
 <body class="bg-slate-50 text-slate-900 font-sans h-screen flex overflow-hidden" x-data="{ sidebarOpen: false }">
