@@ -34,11 +34,37 @@ const labels = {
 // GET /crawler - Render the main source management dashboard
 router.get('/', async (req, res) => {
     try {
-        const allSources = await Source.find().sort({ siteName: 1, category: 1 });
+        // Pagination logic: current page and records per page
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const [allSources, totalSources, activeCount, todayUpdatedCount, uniqueWebsites] = await Promise.all([
+            Source.find().sort({ siteName: 1, category: 1 }).skip(skip).limit(limit),
+            Source.countDocuments(),
+            Source.countDocuments({ isActive: true }),
+            Source.countDocuments({ lastCrawledAt: { $gte: startOfToday } }),
+            Source.distinct('siteName')
+        ]);
+
+        const totalPages = Math.ceil(totalSources / limit);
+
         res.render('crawlerIndex', {
             sources: allSources,
+            totalSources,
+            activeCount,
+            todayUpdatedCount,
+            websiteCount: uniqueWebsites.length,
             title: 'Crawler Management',
-            breadcrumbs: [{ name: 'Crawler' }]
+            breadcrumbs: [{ name: 'Crawler' }],
+
+            currentPage: page,
+            totalPages,
+            limit,
+            totalSources
         });
     } catch (error) {
         res.status(500).send(error.message);

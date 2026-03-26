@@ -35,26 +35,28 @@
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                 <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Sources</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= sources.length %>
+                    <%= totalSources %>
                 </p>
             </div>
+
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                 <p class="text-xs font-bold text-green-500 uppercase tracking-wider">Active</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= sources.filter(s=> s.isActive).length %>
+                    <%= activeCount %>
                 </p>
             </div>
+
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                 <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Today Updated</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= sources.filter(s=> s.lastCrawledAt && new Date(s.lastCrawledAt).toDateString() === new
-                        Date().toDateString()).length %>
+                    <%= todayUpdatedCount %>
                 </p>
             </div>
+
             <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                 <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Websites</p>
                 <p class="text-2xl font-bold text-slate-800">
-                    <%= [...new Set(sources.map(s=> s.siteName))].length %>
+                    <%= websiteCount %>
                 </p>
             </div>
         </div>
@@ -129,6 +131,50 @@
                         <% }) %>
                 </tbody>
             </table>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing <span class="font-medium">
+                        <%= (currentPage - 1) * limit + 1 %>
+                    </span>
+                    to <span class="font-medium">
+                        <%= Math.min(currentPage * limit, totalSources) %>
+                    </span>
+                    of <span class="font-medium text-slate-800">
+                        <%= totalSources %>
+                    </span> sources
+                </div>
+
+                <nav class="inline-flex shadow-sm rounded-md" role="group">
+                    <% if (currentPage> 1) { %>
+                        <a href="?page=<%= currentPage - 1 %>&limit=<%= limit %>"
+                            class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-l-lg hover:bg-slate-50 transition-colors">
+                            Previous
+                        </a>
+                        <% } else { %>
+                            <button disabled
+                                class="px-4 py-2 text-sm font-medium text-slate-300 bg-white border border-slate-200 rounded-l-lg cursor-not-allowed">
+                                Previous
+                            </button>
+                            <% } %>
+
+                                <div
+                                    class="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border-t border-b border-slate-200">
+                                    Page <%= currentPage %> of <%= totalPages %>
+                                </div>
+
+                                <% if (currentPage < totalPages) { %>
+                                    <a href="?page=<%= currentPage + 1 %>&limit=<%= limit %>"
+                                        class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-r-lg hover:bg-slate-50 transition-colors">
+                                        Next
+                                    </a>
+                                    <% } else { %>
+                                        <button disabled
+                                            class="px-4 py-2 text-sm font-medium text-slate-300 bg-white border border-slate-200 rounded-r-lg cursor-not-allowed">
+                                            Next
+                                        </button>
+                                        <% } %>
+                </nav>
+            </div>
         </div>
     </div>
 
