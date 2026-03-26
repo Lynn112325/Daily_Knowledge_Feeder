@@ -26,6 +26,28 @@
           mark: true,
           toc: true,
           footnotes: true,
+        },
+        render: {
+          media: {
+            enable: true
+          }
+        }
+      },
+      image: {
+        isPreview: true,
+      },
+      link: {
+        isOpen: true,
+        click: (element) => {
+          let url = typeof element === 'string'
+            ? element
+            : (element.innerText || element.textContent);
+
+          if (url && url.startsWith('http')) {
+            window.open(url, '_blank');
+          } else {
+            console.warn("Clicked element is not a valid URL:", url);
+          }
         }
       },
       cache: {
@@ -112,6 +134,10 @@
 
     // Dictionary logic: listen for mouseup inside Vditor
     document.getElementById('vditor').addEventListener('mouseup', async (e) => {
+      // Check if the click target is a link or inside a link
+      if (e.target.closest('a')) {
+        return; // Let the browser handle the link click
+      }
       const selection = window.getSelection().toString().trim();
 
       // Only search for English words (at least 2 letters)
@@ -141,6 +167,10 @@
 
     // Close tooltip when clicking elsewhere
     document.addEventListener('mousedown', (e) => {
+      // Check if the click target is a link or inside a link
+      if (e.target.closest('a')) {
+        return; // Let the browser handle the link click
+      }
       if (!tooltip.contains(e.target)) tooltip.style.display = 'none';
     });
   </script>
