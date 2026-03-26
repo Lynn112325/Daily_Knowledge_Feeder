@@ -12,6 +12,8 @@ async function saveToDatabase(articleData) {
         // 1. Add dictionary annotations to the content
         const annotatedContent = await annotateMarkdown(articleData.content);
 
+        const annotatedSummary = await annotateMarkdown(articleData.summary);
+
         let slug = articleData.title
             .toLowerCase()
             .replace(/[^\w\s-]/g, '')
@@ -26,12 +28,12 @@ async function saveToDatabase(articleData) {
             author: articleData.author || "Unknown",
             originalDate: articleData.date,
             originalUrl: articleData.originalUrl,
+            siteName: articleData.siteName,
             // Format category path (e.g., /Health/Allergy)
             category: articleData.category,
             tags: articleData.keywords || [],
             content: annotatedContent,
-            summary: articleData.summary,
-            imageUrl: articleData.image,
+            summary: annotatedSummary,
             // Generate a URL-friendly slug from the title
             slug: articleData.title
                 .toLowerCase()
