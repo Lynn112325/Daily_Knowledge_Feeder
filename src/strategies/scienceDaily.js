@@ -1,6 +1,7 @@
 const he = require('he');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const scraperUtils = require('../utils/scraperUtils');
 
 // Strategy for ScienceDaily - Defines how to find and extract data
 const scienceDailyStrategy = {
@@ -73,17 +74,36 @@ const scienceDailyStrategy = {
                 .filter(k => k !== "")          // Remove empty items
             : [];
 
-        // 3. Image Handling (Supports Responsive Images)
-        const imgElement = $('figure.mainimg img');
-        const srcset = imgElement.attr('srcset');
+        // 1. Create a temporary container to hold all content parts
+        const $wrapper = $('<div></div>');
 
-        // Get the best quality image from srcset, otherwise use src
-        let imagePath = srcset
-            ? srcset.split(',').pop().trim().split(' ')[0]
-            : imgElement.attr('src');
+        // 2. Add the Caption (if it exists)
+        const $caption = $('figcaption');
+        if ($caption.length) {
+            // Wrap in <p> or <em> to make it look like a caption in Markdown
+            $wrapper.append(`<p><em>${$caption.text().trim()}</em></p>`);
+        }
 
-        // Ensure URL starts with https://
-        const image = imagePath ? (imagePath.startsWith('http') ? imagePath : `https://www.sciencedaily.com${imagePath}`) : '';
+        // 3. Add the Lead Paragraph (if it exists)
+        const $leadPara = $('#first.lead');
+        if ($leadPara.length) {
+            $wrapper.append($leadPara.clone());
+        }
+
+        // 4. Add the Main Text
+        const $mainText = $('#text');
+        if ($mainText.length) {
+            $wrapper.append($mainText.html());
+        }
+
+        // 5. Now pass this combined HTML to your utility
+        // Since we've already built the HTML, we change how we call processContent
+        const { contentHtml, leadImage } = scraperUtils.processContent($, {
+            // We pass the wrapper's HTML directly or target the wrapper
+            bodySelector: $wrapper,
+            leadImgSelector: 'figure.mainimg img',
+            baseUrl: this.listConfig.baseUrl
+        });
 
         // 4. Return Clean Data
         // rawHtmlContent is passed to the engine to be converted into Markdown later
@@ -92,9 +112,8 @@ const scienceDailyStrategy = {
             date,
             author,
             keywords,
-            image,
             summary: $('figcaption').text().trim() || $('#abstract').text().trim(),
-            rawHtmlContent: $('#text').html()
+            rawHtmlContent: contentHtml
         };
     }
 
