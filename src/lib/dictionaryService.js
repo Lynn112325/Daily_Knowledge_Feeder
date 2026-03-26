@@ -121,47 +121,42 @@ async function getCleanTranslation(translation) {
     return meanings || null;
 }
 
-
 /**
- * Processes Markdown text to add inline Chinese annotations for difficult English words.
- * Uses a batch-processing approach to handle asynchronous dictionary lookups efficiently.
+ * Adds Chinese annotations to difficult English words in Markdown.
+ * Uses a placeholder system to protect Markdown syntax from being modified.
  */
 async function annotateMarkdown(text) {
-    // 1. Guard clause: Return early if text is empty
     if (!text) return text;
+
     const placeholders = [];
-    // 保護 圖片 ![alt](url)、連結 [text](url)、以及代碼塊 `code`
-    // 這個正則會匹配這些區塊並暫時存入 placeholders 陣列
+
+    // 1. Protect: Replace Markdown images, links, and code blocks with IDs
     const protectedText = text.replace(/(!?\[.*?\]\(.*?\))|(`.*?`)/g, (match) => {
         const id = `__PROTECTED_${placeholders.length}__`;
         placeholders.push(match);
         return id;
     });
 
-    // --- 2. 提取階段：只從「非保護區」提取單字 ---
+    // 2. Extract: Get unique English words (3+ chars) from unprotected text
     const words = Array.from(new Set(protectedText.match(/\b[a-zA-Z]{3,}\b/g) || []));
-    // 2. Extraction: Identify unique English words (3+ characters) to avoid redundant lookups
-    // const words = Array.from(new Set(text.match(/\b[a-zA-Z]{3,}\b/g) || []));
-
-    // 3. Storage: Initialize a Map to store word-to-translation pairs
     const annotationMap = new Map();
 
-    // 4. Batch Processing: Run all dictionary queries in parallel for high performance
+    // 3. Batch Process: Perform dictionary lookups in parallel
     await Promise.all(words.map(async (word) => {
         const annotation = await getHardWordAnnotation(word);
         if (annotation) {
-            // Only store if the word meets the difficulty criteria and has a translation
             annotationMap.set(word, annotation);
         }
     }));
 
+    // 4. Annotate: Insert annotations using the Mark highlighting syntax ==(translation)==
     let annotatedText = protectedText.replace(/\b[a-zA-Z]{3,}\b/g, (word) => {
         const ann = annotationMap.get(word);
         return ann ? `${word} ==(${ann})==` : word;
     });
 
-    // --- 5. 還原階段：把佔位符換回原始的 Markdown ---
-    return annotatedText.replace(/__PROTECTED_(\d+)__/g, (match, index) => {
+    // 5. Restore: Swap placeholders back with original Markdown content
+    return annotatedText.replace(/__PROTECTED_(\d+)__/g, (_, index) => {
         return placeholders[parseInt(index)];
     });
 }
