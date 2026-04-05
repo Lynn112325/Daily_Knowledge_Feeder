@@ -206,7 +206,7 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
     const internalWallSet = new Set(internalWall.map(a => a.originalUrl));
     const hitWall = internalWallSet.size > 0;
     const overlapCount = urls.length - newUrls.length;
-    const overlapMsg = overlapCount > 0 ? ` (Skipped ${overlapCount} existing in other categories or )` : '';
+    const overlapMsg = overlapCount > 0 ? ` (Filtered ${overlapCount} duplicates from history/other categories)` : '';
 
     await logToUI(chalk.gray(`      ✨ Scanned ${urls.length} items. Found ${chalk.bold.green(newUrls.length)} fresh articles to sync${chalk.italic(overlapMsg)}.`));
 
