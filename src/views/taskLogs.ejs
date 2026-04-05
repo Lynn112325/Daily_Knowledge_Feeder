@@ -1,55 +1,62 @@
 <%- include('partials/header', { title: 'Execution Logs' }) %>
     <div class="max-w-7xl mx-auto px-4">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold">Execution Logs</h1>
-            <button onclick="location.reload()" class="text-sm text-blue-600 font-medium">🔄 Refresh
-                Progress</button>
-        </div>
 
-        <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <table class="w-full text-left">
-                <thead class="bg-slate-50 text-slate-500 text-sm uppercase">
-                    <tr>
-                        <th class="px-6 py-4">Task ID / Site</th>
-                        <th class="px-6 py-4">Status</th>
-                        <th class="px-6 py-4">Progress</th>
-                        <th class="px-6 py-4">Started At</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <% tasks.forEach(task=> { %>
+
+        <%- include('partials/taskMonitor') %>
+
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold">Execution Logs</h1>
+                <button onclick="location.reload()" class="text-sm text-blue-600 font-medium">🔄 Refresh
+                    Progress</button>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                <table class="w-full text-left">
+                    <thead class="bg-slate-50 text-slate-500 text-sm uppercase">
                         <tr>
-                            <td class="px-6 py-4">
-                                <div class="font-medium">#<%= task._id.toString().slice(-6) %>
-                                </div>
-                                <div class="text-xs text-slate-400">
-                                    <%= task.name %>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <% if(task.status==='running' ) { %>
-                                    <span
-                                        class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs animate-pulse">Running</span>
-                                    <% } else if(task.status==='completed' ) { %>
-                                        <span
-                                            class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs">Completed</span>
-                                        <% } else { %>
-                                            <span
-                                                class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs text-nowrap">Failed</span>
-                                            <% } %>
-                            </td>
-                            <td class="px-6 py-4">
-                                <div class="text-sm font-mono">
-                                    <%= task.processedCount %> / <%= task.totalTarget %>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 text-sm text-slate-500">
-                                <%= task.createdAt.toLocaleString() %>
-                            </td>
+                            <th class="px-6 py-4">Task ID / Site</th>
+                            <th class="px-6 py-4">Status</th>
+                            <th class="px-6 py-4">Progress</th>
+                            <th class="px-6 py-4">Started At</th>
                         </tr>
-                        <% }) %>
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <% tasks.forEach(task=> { %>
+                            <tr>
+                                <td class="px-6 py-4">
+                                    <div class="font-medium">#<%= task._id.toString().slice(-6) %>
+                                    </div>
+                                    <div class="text-xs text-slate-400">
+                                        <%= task.name %>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <% if(task.status==='running' ) { %>
+                                        <span
+                                            class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs animate-pulse">Running</span>
+                                        <% } else if(task.status==='completed' ) { %>
+                                            <span
+                                                class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs">Completed</span>
+                                            <% } else if(task.status==='stopped' ) { %>
+                                                <span
+                                                    class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs text-nowrap">Stopped</span>
+                                                <% } else { %>
+                                                    <span
+                                                        class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs text-nowrap">Failed</span>
+                                                    <% } %>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="text-sm font-mono">
+                                        <%= task.processedSources %> / <%= task.totalSources %>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-slate-500">
+                                    <%= task.createdAt.toLocaleString() %>
+                                </td>
+                            </tr>
+                            <% }) %>
+                    </tbody>
+                </table>
+            </div>
     </div>
     <%- include('partials/footer.ejs') %>
