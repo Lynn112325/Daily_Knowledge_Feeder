@@ -22,6 +22,7 @@
     "express": "^5.2.1",
     "he": "^1.2.0",
     "mongoose": "^9.3.1",
+    "node-cron": "^4.2.1",
     "robots-parser": "^3.0.1",
     "socket.io": "^4.8.3",
     "turndown": "^7.2.2"
