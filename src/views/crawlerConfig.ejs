@@ -134,67 +134,20 @@
       </form>
     </div>
 
-    <div class="bg-white shadow-lg rounded-lg p-6" x-data="taskMonitor()">
-      <div class="flex justify-between items-center mb-6 border-b pb-4">
-        <h2 class="text-xl font-bold text-gray-800">📡 Active Tasks Monitor</h2>
-        <button @click="fetchTasks()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-            </path>
-          </svg>
-          Refresh
-        </button>
-      </div>
-      <div class="space-y-4">
-        <template x-if="tasks.length === 0">
-          <div class="text-center py-8 text-gray-400 italic bg-gray-50 rounded-lg border border-dashed border-gray-200">
-            No active tasks currently running.
-          </div>
-        </template>
-
-        <template x-for="task in tasks" :key="task._id">
-          <div class="border rounded-lg p-4 bg-gray-50 flex flex-col gap-4">
-            <div class="flex justify-between items-center">
-              <span class="font-bold text-gray-700" x-text="'Task: ' + task._id.substring(18)"></span>
-              <span :class="{
-          'bg-green-100 text-green-700': task.status === 'completed',
-          'bg-blue-100 text-blue-700': task.status === 'running',
-          'bg-red-100 text-red-700': task.status === 'failed',
-          'bg-gray-100 text-gray-700': task.status === 'stopped'
-        }" class="px-2 py-1 rounded text-xs font-bold" x-text="task.status"></span>
-            </div>
-            <div :id="'terminal-' + task._id" x-init="$nextTick(() => handleTaskConnection(task._id))"
-              style="background-color: #0c0c0c; color: #cccccc; padding: 15px; font-family: monospace; font-size: 12px; height: 300px; overflow-y: auto; border-radius: 4px;">
-            </div>
-
-            <div class="flex justify-end">
-              <template x-if="['running', 'pending'].includes(task.status)">
-                <button @click="stopTask(task._id)" class="text-red-600 text-sm font-bold hover:underline">
-                  Stop Task
-                </button>
-              </template>
-            </div>
-          </div>
-        </template>
-
-      </div>
-    </div>
   </div>
 
   <script>
     // Script for the Setup Area
     function crawlerManager() {
       return {
-        selectedSite: '',      // 初始設為空字串，對應 select 的 value=""
+        selectedSite: '',
         search: '',
-        selectedIds: [],       // 這是唯一與 Checkbox x-model 綁定的數組
+        selectedIds: [],
         sources: [],
         isLoading: false,
-        helpText: null,        // 預設為 null 以便判斷
-        depthLimit: 5,         // Default depth
+        helpText: null,
+        depthLimit: 1,         // Default depth
         selectedSite: '',
-
 
         async fetchCategories() {
           if (!this.selectedSite) {
