@@ -1,0 +1,145 @@
+<div class="bg-white shadow-lg rounded-lg p-6 mb-8" x-data="taskMonitor()">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+        <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <span class="relative flex h-3 w-3" x-show="activeTask">
+                <span
+                    class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+            </span>
+            📡 Active Task Monitor
+        </h2>
+        <button @click="fetchActiveTask()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                </path>
+            </svg>
+            Refresh
+        </button>
+    </div>
+
+    <div class="space-y-4">
+        <template x-if="!activeTask">
+            <div
+                class="text-center py-8 text-gray-400 italic bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                No active tasks currently running.
+            </div>
+        </template>
+
+        <template x-if="activeTask">
+            <div class="border rounded-lg p-4 bg-gray-50 flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-gray-700" x-text="'Task ID: ' + activeTask._id.substring(18)"></span>
+                    <span
+                        class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold animate-pulse">RUNNING</span>
+                </div>
+
+                <div id="active-terminal"
+                    style="background-color: #0c0c0c; color: #cccccc; padding: 15px; font-family: monospace; font-size: 12px; height: 300px; overflow-y: auto; border-radius: 4px;">
+                    <div class="text-gray-500 italic">Waiting for logs...</div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button @click="stopTask(activeTask._id)" class="text-red-600 text-sm font-bold hover:underline">
+                        🛑 Stop Task
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+
+<script>
+    function taskMonitor() {
+        return {
+            activeTask: null,      // Current task object being tracked
+            connectedTaskId: null, // Tracked ID to manage Socket.io room membership
+            ansiUp: null,          // ANSI to HTML converter instance
+            socket: null,          // Socket.io client instance
+            monitorInterval: null, // Polling timer reference
+
+            init() {
+                // 1. Initialize ANSI parser and establish Socket connection
+                if (typeof AnsiUp !== 'undefined') {
+                    this.ansiUp = new AnsiUp();
+                }
+                this.socket = io();
+
+                // 2. Initial fetch and start polling every 5s to detect task changes
+                this.fetchActiveTask();
+                this.monitorInterval = setInterval(() => this.fetchActiveTask(), 5000);
+
+                // 3. Global listener for logs (filtered inside renderLog)
+                this.socket.on('task_log', (data) => this.renderLog(data));
+            },
+
+            async fetchActiveTask() {
+                try {
+                    const res = await fetch('/tasks/api/active');
+                    if (res.ok) {
+                        const allTasks = await res.json();
+                        // 4. Identify the first task that is currently in progress
+                        const runningTask = allTasks.find(t => ['running', 'pending'].includes(t.status));
+
+                        if (runningTask) {
+                            this.activeTask = runningTask;
+                            this.handleTaskConnection(runningTask._id);
+                        } else {
+                            // 5. Reset state if no active tasks are found
+                            this.activeTask = null;
+                            this.connectedTaskId = null;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Fetch Tasks Failed", e);
+                }
+            },
+
+            handleTaskConnection(taskId) {
+                // 6. Prevent redundant 'join' emissions if already connected to this task
+                if (this.connectedTaskId === taskId) return;
+
+                this.connectedTaskId = taskId;
+                console.warn(`🔌 Joining task room: ${taskId}`);
+                this.socket.emit('join_task', taskId);
+            },
+
+            renderLog(data) {
+                // 7. Validation: Only process logs if they belong to the active task
+                if (!this.activeTask) return;
+
+                const message = (typeof data === 'object' && data.message) ? data.message : data;
+                const incomingId = (typeof data === 'object' && data.taskId) ? data.taskId : this.activeTask._id;
+
+                if (incomingId !== this.activeTask._id) return;
+
+                const terminal = document.getElementById('active-terminal');
+
+                if (terminal && this.ansiUp) {
+                    // 8. UI Cleanup: Remove placeholder text on first log entry
+                    if (terminal.innerText.includes('Waiting for logs...')) terminal.innerHTML = '';
+
+                    // 9. Append new log line with ANSI colors converted to HTML
+                    const line = document.createElement('div');
+                    line.className = 'mb-1 font-mono text-xs border-l-2 border-blue-500 pl-2 whitespace-pre-wrap';
+
+                    const safeStr = (typeof message === 'string') ? message : JSON.stringify(message);
+                    line.innerHTML = this.ansiUp.ansi_to_html(safeStr);
+
+                    terminal.appendChild(line);
+
+                    // 10. Auto-scroll to keep the latest logs visible
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+            },
+
+            async stopTask(taskId) {
+                if (!confirm('Are you sure you want to stop this task?')) return;
+
+                // 11. Request manual termination and refresh the monitor state
+                await fetch(`/tasks/api/stop/${taskId}`, { method: 'POST' });
+                this.fetchActiveTask();
+            }
+        }
+    }
+</script>
