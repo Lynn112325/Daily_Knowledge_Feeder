@@ -22,15 +22,11 @@ const sourceSchema = new mongoose.Schema({
     // Timestamp of the last successful crawl to prevent over-crawling
     lastCrawledAt: { type: Date, default: null },
 
+    isInitialized: { type: Boolean, default: false },
     // --- Backfill Progression ---
     lastProcessedUnit: { type: Number, default: 1 }, // Current bookmark for backfill
     isBackfillCompleted: { type: Boolean, default: false }, // Flag for historical data completion
 
-    initStatus: {
-        type: String,
-        enum: ['pending', 'initialized', 'fully_backfilled'],
-        default: 'pending'
-    }
 }, {
     // Automatically creates 'createdAt' and 'updatedAt' fields
     timestamps: true
