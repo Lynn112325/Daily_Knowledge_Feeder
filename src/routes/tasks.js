@@ -32,19 +32,24 @@ router.get('/api/active', async (req, res) => {
 });
 
 // POST /tasks/api/stop/:id - Abort a running task
-router.get('/api/stop/:id', async (req, res) => {
+router.post('/api/stop/:id', async (req, res) => {
     try {
-        // Set status to stopped
-        await Task.findByIdAndUpdate(req.params.id, {
+        const taskId = req.params.id;
+
+        // 1. Verify the task exists before attempting to modify it
+        const task = await Task.findById(taskId);
+        if (!task) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        // 2. Set status to 'stopped'; the background engine checks this flag to exit loops
+        await Task.findByIdAndUpdate(taskId, {
             status: 'stopped',
             errorLog: 'Manually stopped by user.',
             completedAt: new Date()
         });
 
-        // Note: Actual stoppage requires your crawlerService.js to check the DB status 
-        // during its loop and break if status !== 'running'.
-
-        res.json({ success: true });
+        res.json({ success: true, message: `Task ${taskId} has been stopped.` });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
