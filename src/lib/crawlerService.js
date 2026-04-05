@@ -113,6 +113,7 @@ const BACKFILL_HANDLERS = {
             if (savedCount === 0) {
                 await logToUI(chalk.gray(`      ⏭️  Batch ${source.lastProcessedUnit} all duplicates, searching deeper...`));
             }
+
         }
     },
 
@@ -197,11 +198,21 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
     const newUrls = urls.filter(u => !existingSet.has(u));
     let savedInThisBatch = 0;
 
-    await logToUI(chalk.gray(`      📊 Page analysis: ${urls.length} total, ${newUrls.length} new to scrape.`));
+    const internalWall = await Article.find({
+        originalUrl: { $in: urls },
+        category: source.category
+    }).select('originalUrl');
+
+    const internalWallSet = new Set(internalWall.map(a => a.originalUrl));
+    const hitWall = internalWallSet.size > 0;
+    const overlapCount = urls.length - newUrls.length;
+    const overlapMsg = overlapCount > 0 ? ` (Skipped ${overlapCount} existing in other categories or )` : '';
+
+    await logToUI(chalk.gray(`      ✨ Scanned ${urls.length} items. Found ${chalk.bold.green(newUrls.length)} fresh articles to sync${chalk.italic(overlapMsg)}.`));
 
     // If no new articles found, mark this category as finished
     if (newUrls.length === 0) {
-        await logToUI(chalk.green(`   ✨ No new historical articles. Category Backfilled!`));
+        await logToUI(chalk.green(`   ✨ No new articles. Category Cleared!`));
         await source.save();
     }
 
@@ -239,23 +250,17 @@ async function processUrlList(urls, source, strategy, taskId, stats) {
         } catch (err) {
             stats.failCount++;
             await logToUI(chalk.red(`      ❌ Article Permanent Failure [${url}]: ${err.message}`));
-        } finally {
-            // Always update progress in the Task DB for the UI to see
-            stats.totalProcessed++;
-            await Task.findByIdAndUpdate(taskId, {
-                processedCount: stats.totalProcessed,
-                successCount: stats.successCount,
-                failCount: stats.failCount
-            });
         }
-    } return { status: 'CONTINUE', savedCount: savedInThisBatch };
+    } return {
+        status: 'CONTINUE', savedCount: savedInThisBatch, hitWall: hitWall
+    };
 }
 
 /**
  * Mode 1: Daily Updates
  * Check the first page of a category and grab the latest articles.
  */
-async function handleIncremental(sourceIds, limitPerCategory, taskId) {
+async function handleIncremental(sourceIds, taskId) {
     const stats = { totalProcessed: 0, successCount: 0, failCount: 0 };
     await logToUI(chalk.bold.yellow(`\n🚀 [ENGINE: INCREMENTAL] Task #${taskId} started.`));
 
@@ -263,28 +268,42 @@ async function handleIncremental(sourceIds, limitPerCategory, taskId) {
 
     return taskContext.run({ taskId }, async () => {
         try {
-            await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
+            await Task.findByIdAndUpdate(taskId, {
+                status: 'running',
+                startedAt: new Date(),
+                totalItems: sourceIds.length
+            });
 
-            for (const sourceId of sourceIds) {
+            for (const [i, sourceId] of sourceIds.entries()) {
                 if (await isTaskStopped(taskId)) break;
 
                 const source = await Source.findById(sourceId);
                 const strategy = STRATEGIES[source.strategyKey];
-                const fullListUrl = new URL(source.path, source.baseUrl).href;
 
-                await logToUI(chalk.blue(`\n📂 Category: ${source.category}`));
+                const baseUrlClean = source.baseUrl.replace(/\/$/, "");
+                const pathClean = source.path.startsWith("/") ? source.path : `/${source.path}`;
+                const fullListUrl = `${baseUrlClean}${pathClean}`;
+
+                if (!source.isActive) {
+                    await logToUI(chalk.gray(`[Skip] ${source.category} is inactive.`));
+                    continue;
+                }
+
+                await logToUI(chalk.blue(`\n📂 [${i + 1}/${sourceIds.length}] Category: ${source.category}`));
+
                 // Fetch list of URLs from the first page
-                const allUrls = await getList(fullListUrl, strategy.listConfig, globalConfig.USER_AGENT);
+                const targetUrls = await getList(fullListUrl, strategy.listConfig, globalConfig.USER_AGENT);
 
-                if (!allUrls?.length) continue;
+                if (!targetUrls?.length) continue;
 
-                // Only process up to the limit set by the user
-                const targetUrls = allUrls.slice(0, limitPerCategory);
                 const result = await processUrlList(targetUrls, source, strategy, taskId, stats);
+                if (result && result.status === 'STOPPED') break;
 
-                if (result === 'STOPPED') break;
                 // Record that this source was checked today
-                await Source.findByIdAndUpdate(sourceId, { lastCrawledAt: new Date() });
+                await Source.findByIdAndUpdate(sourceId, { isInitialized: true, lastCrawledAt: new Date() });
+                await Task.findByIdAndUpdate(taskId, {
+                    processedSources: i + 1,
+                });
             }
 
             const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
@@ -292,6 +311,7 @@ async function handleIncremental(sourceIds, limitPerCategory, taskId) {
             await logToUI(chalk.bold.green(`\n🏁 Incremental Task Finished.`));
 
         } catch (err) {
+            console.error(err);
             await logToUI(chalk.bgRed(" ENGINE CRASH "), err);
             await Task.findByIdAndUpdate(taskId, { status: 'failed', errorLog: err.message });
         }
@@ -310,19 +330,28 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
 
         try {
             await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
-            for (const sourceId of sourceIds) {
+            for (const [i, sourceId] of sourceIds.entries()) {
                 if (await isTaskStopped(taskId)) break;
 
                 const source = await Source.findById(sourceId);
                 const strategy = STRATEGIES[source.strategyKey];
                 const type = strategy.listConfig.backfillType || 'PAGINATION';
 
+                if (!source.isActive) {
+                    await logToUI(chalk.gray(`[Skip] ${source.category} is inactive.`));
+                    continue;
+                }
+
                 const handler = BACKFILL_HANDLERS[type];
                 if (handler) {
-                    await logToUI(chalk.yellow(`\n📂 [${type}] Processing: ${source.category}`));
+                    await logToUI(chalk.blue(`\n📂 [${i + 1}/${sourceIds.length}] Category: ${source.category}`));
                     await handler(source, strategy, depthLimit, taskId, stats);
                     await Source.findByIdAndUpdate(sourceId, {
                         lastCrawledAt: new Date()
+                    });
+
+                    await Task.findByIdAndUpdate(taskId, {
+                        processedSources: i + 1,
                     });
                     await source.save();
                 } else {
@@ -343,24 +372,24 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
 }
 
 /**
- * Helper to determine UI labels based on the site's crawling method
+ * Batch initialize all unanchored (new) sources
  */
-function getTaskProgressInfo(strategyKey, currentCount) {
-    const strategy = STRATEGIES[strategyKey];
-    const type = strategy?.listConfig?.backfillType || 'PAGINATION';
+async function runQuickInitTask(sourcesToInit, taskId) {
+    // 1. Convert Mongoose objects into a clean array of ID strings
+    const sourceIds = sourcesToInit.map(s => s._id.toString());
 
-    const config = {
-        'SINGLE_PAGE_API': { label: 'Batches', unit: 'batch' },
-        'INFINITE_SCROLL': { label: 'Scrolls', unit: 'scroll' },
-        'PAGINATION': { label: 'Pages', unit: 'page' }
-    };
+    await logToUI(chalk.bold.cyan(`\n⚡ [QUICK INIT] Starting anchor task for ${sourceIds.length} sources...`));
 
-    const info = config[type] || config['PAGINATION'];
+    try {
+        // 2. Reuse the Incremental handler to fetch only the first page (baseline)
+        await handleIncremental(sourceIds, taskId);
 
-    return {
-        label: info.label,
-        display: `${info.label} Scraped: ${currentCount}`
-    };
+        await logToUI(chalk.bold.green(`\n✅ [QUICK INIT] All sources anchored successfully.`));
+    } catch (err) {
+        // 3. Log critical failures to the console/UI for debugging
+        await logToUI(chalk.bgRed(" QUICK INIT ERROR "), err);
+        throw err;
+    }
 }
 
-module.exports = { handleIncremental, handleBackfill, getTaskProgressInfo };
+module.exports = { handleIncremental, handleBackfill, runQuickInitTask };
