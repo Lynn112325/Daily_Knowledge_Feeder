@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Source = require('../models/Source');
 const Task = require('../models/Task');
-const { handleIncremental, handleBackfill } = require('../lib/crawlerService');
+const { runQuickInitTask, handleBackfill } = require('../lib/crawlerService');
 const STRATEGIES = require('../config/strategies');
 const globalConfig = require('../config/global');
 
@@ -42,14 +42,14 @@ router.get('/', async (req, res) => {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
-        const [allSources, totalSources, activeCount, todayUpdatedCount, uniqueWebsites] = await Promise.all([
+        const [allSources, totalSources, activeCount, todayUpdatedCount, uniqueWebsites, pendingInitCount] = await Promise.all([
             Source.find().sort({ siteName: 1, category: 1 }).skip(skip).limit(limit),
             Source.countDocuments(),
             Source.countDocuments({ isActive: true }),
             Source.countDocuments({ lastCrawledAt: { $gte: startOfToday } }),
-            Source.distinct('siteName')
+            Source.distinct('siteName'),
+            Source.countDocuments({ isInitialized: false, isActive: true })
         ]);
-
         const totalPages = Math.ceil(totalSources / limit);
 
         res.render('crawlerIndex', {
@@ -61,13 +61,48 @@ router.get('/', async (req, res) => {
             title: 'Crawler Management',
             breadcrumbs: [{ name: 'Crawler' }],
 
+            // Pagination
             currentPage: page,
             totalPages,
             limit,
-            totalSources
+            totalSources,
+            // quick-init
+            pendingInitCount
         });
     } catch (error) {
         res.status(500).send(error.message);
+    }
+});
+
+router.post('/quick-init-all', async (req, res) => {
+    try {
+        // 1. Identify sources that need a baseline crawl (pending initialization)
+        const sourcesToInit = await Source.find({ isInitialized: false, isActive: true });
+
+        if (sourcesToInit.length === 0) {
+            return res.status(400).json({ message: 'No pending sources to initialize.' });
+        }
+
+        // 2. Create a Task document to track macro/micro progress in the UI
+        const task = await Task.create({
+            name: 'Quick Init Task',
+            crawlMode: 'quick_init',
+            status: 'running',
+            totalSources: sourcesToInit.length,
+            startedAt: new Date()
+        });
+
+        // 3. Fire-and-forget: Trigger the engine in the background without blocking the response
+        runQuickInitTask(sourcesToInit, task._id);
+
+        res.json({
+            success: true,
+            taskId: task._id,
+            message: `Task #${task._id} started for ${sourcesToInit.length} sources.`
+        });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
     }
 });
 
@@ -94,29 +129,20 @@ router.get('/backfill', async (req, res) => {
 router.post('/start', async (req, res) => {
     const { siteName, crawlMode, limit, sourceIds } = req.body;
 
-    // Calculate total items to process based on mode
-    let totalTarget = sourceIds.length * limit;
-    if (crawlMode === "backfill") {
-        // For backfill, target is calculated by batch size
-        totalTarget = globalConfig.BATCH_SIZE * (sourceIds.length * limit);
-    }
-    console.log(siteName);
     // Register the task in DB before execution
     const task = await Task.create({
         name: siteName,
         crawlMode: crawlMode,
         status: 'pending',
-        totalTarget: totalTarget
+        totalSources: sourceIds.length
     });
 
     // Run the async crawler engine (non-blocking)
     if (crawlMode === 'backfill') {
         handleBackfill(sourceIds, parseInt(limit), task._id);
-    } else {
-        handleIncremental(sourceIds, parseInt(limit), task._id);
     }
 
-    res.redirect('/crawler/backfill');
+    res.redirect('/tasks');
 });
 
 // GET /api/sources/:siteName - Fetch categories and UI metadata for a specific site
