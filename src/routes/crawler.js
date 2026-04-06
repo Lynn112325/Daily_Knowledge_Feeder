@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Source = require('../models/Source');
 const Task = require('../models/Task');
-const { runQuickInitTask, handleBackfill } = require('../lib/crawlerService');
+const { getActiveTask, runQuickInitTask, handleBackfill } = require('../lib/crawlerService');
 const STRATEGIES = require('../config/strategies');
 const globalConfig = require('../config/global');
 
@@ -76,14 +76,22 @@ router.get('/', async (req, res) => {
 
 router.post('/quick-init-all', async (req, res) => {
     try {
-        // 1. Identify sources that need a baseline crawl (pending initialization)
+        // 1. Concurrency Check: Prevent starting if another task is active
+        const runningTask = await getActiveTask();
+        if (runningTask) {
+            return res.status(400).json({
+                success: false,
+                message: `Another task "${runningTask.name}" is currently running. Please try again later.`
+            });
+        }
+        // 2. Identify sources that need a baseline crawl (pending initialization)
         const sourcesToInit = await Source.find({ isInitialized: false, isActive: true });
 
         if (sourcesToInit.length === 0) {
             return res.status(400).json({ message: 'No pending sources to initialize.' });
         }
 
-        // 2. Create a Task document to track macro/micro progress in the UI
+        // 3. Create a Task document to track macro/micro progress in the UI
         const task = await Task.create({
             name: 'Quick Init Task',
             crawlMode: 'quick_init',
@@ -92,7 +100,7 @@ router.post('/quick-init-all', async (req, res) => {
             startedAt: new Date()
         });
 
-        // 3. Fire-and-forget: Trigger the engine in the background without blocking the response
+        // 4. Fire-and-forget: Trigger the engine in the background without blocking the response
         runQuickInitTask(sourcesToInit, task._id);
 
         res.json({
@@ -127,22 +135,37 @@ router.get('/backfill', async (req, res) => {
 
 // POST /crawler/start - Trigger the background scraping task
 router.post('/start', async (req, res) => {
-    const { siteName, crawlMode, limit, sourceIds } = req.body;
+    try {
+        // 1. Concurrency Check: Prevent starting if another task is active
+        const runningTask = await getActiveTask();
+        if (runningTask) {
+            return res.status(400).json({
+                success: false,
+                message: `Another task "${runningTask.name}" is currently running. Please try again later.`
+            });
+        }
+        const { siteName, crawlMode, limit, sourceIds } = req.body;
 
-    // Register the task in DB before execution
-    const task = await Task.create({
-        name: siteName,
-        crawlMode: crawlMode,
-        status: 'pending',
-        totalSources: sourceIds.length
-    });
+        // Register the task in DB before execution
+        const task = await Task.create({
+            name: siteName,
+            crawlMode: crawlMode,
+            status: 'pending',
+            totalSources: sourceIds.length
+        });
 
-    // Run the async crawler engine (non-blocking)
-    if (crawlMode === 'backfill') {
-        handleBackfill(sourceIds, parseInt(limit), task._id);
+        // Run the async crawler engine (non-blocking)
+        if (crawlMode === 'backfill') {
+            handleBackfill(sourceIds, parseInt(limit), task._id);
+        }
+        return res.json({
+            success: true,
+            redirectUrl: '/tasks',
+            message: 'Task started successfully.'
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: error.message });
     }
-
-    res.redirect('/tasks');
 });
 
 // GET /api/sources/:siteName - Fetch categories and UI metadata for a specific site
