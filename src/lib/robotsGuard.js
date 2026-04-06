@@ -15,7 +15,7 @@ async function isAllowed(targetUrl, userAgent) {
         // robots.txt must always be located at the root of the domain
         const robotsUrl = `${urlObj.origin}/robots.txt`;
 
-        await logToUI(chalk.blue.bold(`\n🔍 Checking Robots Compliance: ${robotsUrl}`));
+        await logToUI(chalk.blueBright.bold(`\n🔍 Checking Robots Compliance: ${robotsUrl}`));
 
         // 1. Fetch robots.txt with a timeout and a descriptive User-Agent
         const response = await axios.get(robotsUrl, {

@@ -59,7 +59,7 @@ async function scrapeArticle(url, strategy, userAgent) {
         const $ = cheerio.load(data);
 
         // 2. Extract Data: Run the site-specific strategy
-        await logToUI(chalk.blue(`Executing strategy: ${strategy.name}...`));
+        await logToUI(chalk.blueBright(`Executing strategy: ${strategy.name}...`));
         const extractedData = strategy.extract($);
 
         // 3. HTML to Markdown: Convert the main content body

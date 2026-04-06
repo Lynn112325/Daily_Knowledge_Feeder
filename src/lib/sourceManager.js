@@ -11,7 +11,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  * Synchronizes website categories from a strategy into the MongoDB database.
  */
 async function syncCategories(strategy, userAgent) {
-    console.log(chalk.blue(`🔍 Initiating discovery for: ${strategy.name}...`));
+    console.log(chalk.blueBright(`🔍 Initiating discovery for: ${strategy.name}...`));
 
     try {
         // 1. Compliance: Check robots.txt permissions

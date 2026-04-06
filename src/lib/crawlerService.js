@@ -57,7 +57,7 @@ async function handleCategoryOverlap(urls, currentCategory) {
         { $addToSet: { category: currentCategory } } // Adds to array only if not already present
     );
     if (result.modifiedCount > 0) {
-        await logToUI(chalk.blue(`      🏷️  Overlap: Updated ${result.modifiedCount} articles with new category [${currentCategory}]`));
+        await logToUI(chalk.blueBright(`      🏷️  Overlap: Updated ${result.modifiedCount} articles with new category [${currentCategory}]`));
     }
     return result.modifiedCount;
 }
@@ -289,7 +289,7 @@ async function handleIncremental(sourceIds, taskId) {
                     continue;
                 }
 
-                await logToUI(chalk.blue(`\n📂 [${i + 1}/${sourceIds.length}] Category: ${source.category}`));
+                await logToUI(chalk.blueBright(`\n📂 [${i + 1}/${sourceIds.length}] Category: ${source.category}`));
 
                 // Fetch list of URLs from the first page
                 const targetUrls = await getList(fullListUrl, strategy.listConfig, globalConfig.USER_AGENT);
@@ -344,7 +344,7 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
 
                 const handler = BACKFILL_HANDLERS[type];
                 if (handler) {
-                    await logToUI(chalk.blue(`\n📂 [${i + 1}/${sourceIds.length}] Category: ${source.category}`));
+                    await logToUI(chalk.blueBright(`\n📂 [${i + 1}/${sourceIds.length}] Category: ${source.category}`));
                     await handler(source, strategy, depthLimit, taskId, stats);
                     await Source.findByIdAndUpdate(sourceId, {
                         lastCrawledAt: new Date()
