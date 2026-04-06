@@ -22,7 +22,7 @@ const taskSchema = new mongoose.Schema({
     failCount: { type: Number, default: 0 },        // Total articles that failed to save
 
     // Error details for failed status
-    errorLog: { type: String },
+    errorLog: { type: [String] },
     logs: { type: [String] },
 
     // Timing stats

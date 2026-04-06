@@ -36,6 +36,17 @@ async function checkRobotsWithCache(url, userAgent) {
 }
 
 /**
+ * 檢查是否有任何正在執行的任務
+ * 封裝在 Service 層，讓 Route 和 Cron 都能共用
+ */
+async function getActiveTask() {
+    return await Task.findOne({
+        status: 'running',
+        crawlMode: { $in: ['incremental', 'backfill', 'quick_init'] }
+    });
+}
+
+/**
  * Check the database to see if the user clicked "Stop" for this task
  */
 async function isTaskStopped(taskId) {
@@ -268,6 +279,20 @@ async function handleIncremental(sourceIds, taskId) {
 
     return taskContext.run({ taskId }, async () => {
         try {
+
+            const runningTask = await getActiveTask();
+            if (runningTask && runningTask._id.toString() !== taskId.toString()) {
+                console.log(chalk.red(`🛑 Engine blocked: Another task ${runningTask._id} is active.`));
+                await Task.findByIdAndUpdate(taskId, {
+                    status: 'failed',
+                    errorLog: ['Engine busy: Parallel execution prevented.']
+                });
+                return;
+            }
+
+            const task = await Task.findById(taskId);
+            const currentMode = task.crawlMode;
+
             await Task.findByIdAndUpdate(taskId, {
                 status: 'running',
                 startedAt: new Date(),
@@ -300,7 +325,13 @@ async function handleIncremental(sourceIds, taskId) {
                 if (result && result.status === 'STOPPED') break;
 
                 // Record that this source was checked today
-                await Source.findByIdAndUpdate(sourceId, { isInitialized: true, lastCrawledAt: new Date() });
+                const updateData = { lastCrawledAt: new Date() };
+
+                if (currentMode === 'quick_init') {
+                    updateData.isInitialized = true;
+                }
+
+                await Source.findByIdAndUpdate(sourceId, updateData);
                 await Task.findByIdAndUpdate(taskId, {
                     processedSources: i + 1,
                 });
@@ -329,6 +360,16 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
     return taskContext.run({ taskId }, async () => {
 
         try {
+            const runningTask = await getActiveTask();
+            if (runningTask && runningTask._id.toString() !== taskId.toString()) {
+                console.log(chalk.red(`🛑 Engine blocked: Another task ${runningTask._id} is active.`));
+                await Task.findByIdAndUpdate(taskId, {
+                    status: 'failed',
+                    errorLog: ['Engine busy: Parallel execution prevented.']
+                });
+                return;
+            }
+
             await Task.findByIdAndUpdate(taskId, { status: 'running', startedAt: new Date() });
             for (const [i, sourceId] of sourceIds.entries()) {
                 if (await isTaskStopped(taskId)) break;
@@ -336,6 +377,18 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
                 const source = await Source.findById(sourceId);
                 const strategy = STRATEGIES[source.strategyKey];
                 const type = strategy.listConfig.backfillType || 'PAGINATION';
+
+                if (!source.isInitialized) {
+                    const errMsg = `[Skip] Category "${source.category}" is NOT initialized. Please run Quick Init first.`;
+                    await logToUI(chalk.bgRed.white(errMsg));
+
+                    await Task.findByIdAndUpdate(taskId, {
+                        $push: { errorLog: errMsg }
+                    });
+
+                    stats.failCount++;
+                    continue;
+                }
 
                 if (!source.isActive) {
                     await logToUI(chalk.gray(`[Skip] ${source.category} is inactive.`));
@@ -362,7 +415,6 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
             const finalStatus = (await isTaskStopped(taskId)) ? 'stopped' : 'completed';
             await Task.findByIdAndUpdate(taskId, { status: finalStatus, completedAt: new Date() });
             await logToUI(chalk.bold.green(`\n🏁 Backfill Task Ended as [${finalStatus}].`));
-
 
         } catch (err) {
             await logToUI(chalk.bgRed(" BACKFILL CRASH "), err);
@@ -392,4 +444,4 @@ async function runQuickInitTask(sourcesToInit, taskId) {
     }
 }
 
-module.exports = { handleIncremental, handleBackfill, runQuickInitTask };
+module.exports = { getActiveTask, handleIncremental, handleBackfill, runQuickInitTask };
