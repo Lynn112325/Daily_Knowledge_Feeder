@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Article = require('../models/Article');
 const MarkdownService = require('../services/markdownService');
+const dateHelper = require('../utils/dateHelper');
 
 /**
  * Route: GET /articles
@@ -25,21 +26,31 @@ router.get('/', async (req, res) => {
             queryFilter.category = category; // Mongoose matches item in array automatically
         }
 
+        const startOfToday = dateHelper.parse().startOf('day').toDate();
+
         // 3. Parallel execution (Important: countDocuments must use queryFilter)
         const [articles, filteredCount, readArticlesCount, todayArticlesCount, allCategories] = await Promise.all([
             Article.find(queryFilter).sort({ originalDate: -1 }).skip(skip).limit(limit),
             Article.countDocuments(queryFilter), // Current search result count
             Article.countDocuments({ isRead: true }),
             Article.countDocuments({
-                createdAt: { $gte: new Date().setHours(0, 0, 0, 0) }
+                createdAt: { $gte: startOfToday }
             }),
             Article.distinct('category') // Still need this for the dropdown list
         ]);
 
+        const formattedArticles = articles.map(article => {
+            const s = article.toObject();
+            s.createdAtDisplay = article.createdAt
+                ? dateHelper.getDateTime(article.createdAt)
+                : 'Null';
+            return s;
+        });
+
         const totalPages = Math.ceil(filteredCount / limit);
 
         res.render('articleList', {
-            articles,
+            articles: formattedArticles,
             totalArticles: filteredCount, // Return filtered total for pagination
             readCount: readArticlesCount,
             todayCount: todayArticlesCount,
