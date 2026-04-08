@@ -14,18 +14,24 @@ router.get('/', async (req, res) => {
     });
 });
 
-// GET /tasks/api/active - Get running/recent tasks for monitor
+// GET /tasks/api/active
 router.get('/api/active', async (req, res) => {
     try {
-        // Find tasks that are running, pending, or completed very recently (e.g., today)
+        // 1. Fetch recent tasks for the list
         const tasks = await Task.find({
             $or: [
                 { status: { $in: ['running', 'pending'] } },
-                { updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } // Keep history for 24h
+                { updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }
             ]
         }).sort({ createdAt: -1 }).limit(10);
 
-        res.json(tasks);
+        // 2. Determine if the engine is "Busy" (Is there any task currently running/pending?)
+        const isBusy = tasks.some(t => ['running', 'pending'].includes(t.status));
+
+        res.json({
+            active: isBusy, // This satisfies the frontend check
+            tasks: tasks    // This provides the list data
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
