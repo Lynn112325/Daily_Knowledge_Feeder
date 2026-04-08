@@ -69,21 +69,6 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * Helper: Build dynamic breadcrumbs based on article category array
- */
-function generateBreadcrumbs(article) {
-    const categoryParts = Array.isArray(article.category) ? article.category : [];
-    return [
-        { name: 'Articles', url: '/articles' },
-        ...categoryParts.map((cat, idx) => ({
-            name: cat,
-            url: `/articles?category=${encodeURIComponent(categoryParts.slice(0, idx + 1).join('/'))}`
-        })),
-        { name: article.title.substring(0, 20) + '...' }
-    ];
-}
-
-/**
  * Route: GET /articles/:id
  * Desc: Display single article with Markdown formatting and Vditor support
  */
@@ -100,7 +85,10 @@ router.get('/:id', async (req, res) => {
             initialMarkdown: fullMarkdown,
             articleId: article._id,
             title: article.title,
-            breadcrumbs: generateBreadcrumbs(article),
+            breadcrumbs: [
+                { name: 'Articles', url: '/articles' },
+                { name: article.title }
+            ],
             needEditor: true
         });
     } catch (err) {
