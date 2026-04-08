@@ -13,7 +13,13 @@ router.get('/', async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
-
+        const sortBy = req.query.sortBy || 'originalDate';
+        const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+        const searchQuery = req.query.q || '';
+        // 2. 建立排序物件 (不要多包一層)
+        const sortOptions = {};
+        sortOptions[sortBy] = sortOrder;
+        console.log('Final Sort Options:', sortOptions);
         // 1. Get search params from URL
         const { q, category } = req.query;
         let queryFilter = {};
@@ -30,7 +36,7 @@ router.get('/', async (req, res) => {
 
         // 3. Parallel execution (Important: countDocuments must use queryFilter)
         const [articles, filteredCount, readArticlesCount, todayArticlesCount, allCategories] = await Promise.all([
-            Article.find(queryFilter).sort({ originalDate: -1 }).skip(skip).limit(limit),
+            Article.find(queryFilter).sort(sortOptions).skip(skip).limit(limit),
             Article.countDocuments(queryFilter), // Current search result count
             Article.countDocuments({ isRead: true }),
             Article.countDocuments({
@@ -60,6 +66,9 @@ router.get('/', async (req, res) => {
             totalPages,
             limit,
             searchQuery: q || '', // Send back to keep input state
+            sortBy,
+            sortOrder: req.query.sortOrder || 'desc',
+            queryString: `&q=${searchQuery}&category=${category}&sortBy=${sortBy}&sortOrder=${req.query.sortOrder || 'desc'}`,
             selectedCategory: category || 'All',
             title: 'Articles',
             breadcrumbs: [{ name: 'Articles', url: '/articles' }, { name: 'List' }]

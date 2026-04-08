@@ -69,16 +69,43 @@
             <table class="min-w-full divide-y divide-slate-200">
                 <thead class="bg-slate-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Title
-                            & Author</th>
-                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                            Category</th>
-                        <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status
+                        <th
+                            class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100">
+                            <% let titleOrder=(sortBy==='title' && sortOrder==='desc' ) ? 'asc' : 'desc' ; let
+                                titleLink=`?page=1&limit=${limit}&q=${searchQuery}&category=${selectedCategory}&sortBy=title&sortOrder=${titleOrder}`;
+                                %>
+                                <a href="<%= titleLink %>" class="flex items-center gap-1 w-full h-full">
+                                    Title & Author <%= sortBy==='title' ? (sortOrder==='asc' ? '🔼' : '🔽' ) : '↕️' %>
+                                </a>
                         </th>
+
                         <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                            Collected At</th>
+                            Category
+                        </th>
+
+                        <th
+                            class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100">
+                            <% let statusOrder=(sortBy==='isRead' && sortOrder==='desc' ) ? 'asc' : 'desc' ; let
+                                statusLink=`?page=1&limit=${limit}&q=${searchQuery}&category=${selectedCategory}&sortBy=isRead&sortOrder=${statusOrder}`;
+                                %>
+                                <a href="<%= statusLink %>" class="flex items-center gap-1 w-full h-full">
+                                    Status <%= sortBy==='isRead' ? (sortOrder==='asc' ? '🔼' : '🔽' ) : '↕️' %>
+                                </a>
+                        </th>
+
+                        <th
+                            class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100">
+                            <% let dateOrder=(sortBy==='createdAt' && sortOrder==='desc' ) ? 'asc' : 'desc' ; let
+                                dateLink=`?page=1&limit=${limit}&q=${searchQuery}&category=${selectedCategory}&sortBy=createdAt&sortOrder=${dateOrder}`;
+                                %>
+                                <a href="<%= dateLink %>" class="flex items-center gap-1 w-full h-full">
+                                    Collected At <%= sortBy==='createdAt' ? (sortOrder==='asc' ? '🔼' : '🔽' ) : '↕️' %>
+                                </a>
+                        </th>
+
                         <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
-                            Actions</th>
+                            Actions
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-slate-200">
@@ -86,7 +113,7 @@
                         <tr x-show="matchesSearch('<%= article.title %> <%= article.category %>')"
                             class="hover:bg-slate-50 transition">
 
-                            <td class="px-6 py-4 max-w-[350px]">
+                            <td class="px-6 py-4 max-w-[360px]">
                                 <div class="min-w-0 flex items-center" x-data="{ showFullTitle: false }"
                                     :class="{ 'relative z-50': showFullTitle, 'relative z-0': !showFullTitle }">
 
@@ -118,7 +145,7 @@
                                 </div>
                             </td>
 
-                            <td class="px-6 py-4 max-w-[120px]">
+                            <td class="px-6 py-4 max-w-[160px]">
                                 <div class="flex items-center gap-1.5" x-data="{ firstOpen: false, moreOpen: false }">
                                     <% if (Array.isArray(article.category) && article.category.length> 0) { %>
 
@@ -231,7 +258,7 @@
 
                 <div class="inline-flex shadow-sm rounded-md" role="group">
                     <% if (currentPage> 1) { %>
-                        <a href="?page=<%= currentPage - 1 %>&limit=<%= limit %>&q=<%= searchQuery %>&category=<%= selectedCategory %>"
+                        <a href="?page=?page=<%= currentPage - 1 %><%= queryString %>"
                             class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-l-lg hover:bg-slate-50">
                             Previous
                         </a>
@@ -248,7 +275,7 @@
                                 </div>
 
                                 <% if (currentPage < totalPages) { %>
-                                    <a href="?page=<%= currentPage + 1 %>&limit=<%= limit %>&q=<%= searchQuery %>&category=<%= selectedCategory %>"
+                                    <a href="?page=<%= currentPage - 1 %><%= queryString %>"
                                         class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-r-lg hover:bg-slate-50">
                                         Next
                                     </a>
