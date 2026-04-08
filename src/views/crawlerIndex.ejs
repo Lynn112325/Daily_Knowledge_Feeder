@@ -20,24 +20,34 @@
                         class="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none w-64">
                 </div>
                 <div class="flex items-center gap-3 w-full sm:w-auto order-2">
-                    <button id="btnQuickInit" onclick="handleQuickInit()" <%=pendingInitCount===0 ? 'disabled' : '' %>
-                        class="inline-flex items-center px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg
-                        hover:bg-amber-600 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round"
-                                stroke-width="2"></path>
-                        </svg>
-                        Quick Init (<%= pendingInitCount %>)
-                    </button>
+                    <% /*if (pendingInitCount> 0) {*/ %>
+                        <div x-data="sourceManager()" x-init="init()">
+                            <button id="btnQuickInit" @click="handleQuickInit()" :disabled="isSystemBusy" class="inline-flex items-center px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg
+                                hover:bg-amber-600 transition shadow-sm 
+                                disabled:opacity-50 disabled:cursor-not-allowed">
 
-                    <a href="/crawler/backfill"
-                        class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition shadow-sm">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
-                            </path>
-                        </svg>
-                        Deep Dive
-                    </a>
+                                <template x-if="!isSystemBusy">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round"
+                                            stroke-linejoin="round" stroke-width="2"></path>
+                                    </svg>
+                                </template>
+
+                                <span
+                                    x-text="isSystemBusy ? 'Engine Busy' : 'Quick Init (<%= pendingInitCount %>)'"></span>
+                            </button>
+                        </div>
+                        <% /*} */%>
+
+                            <a href="/crawler/backfill"
+                                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition shadow-sm">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2">
+                                    </path>
+                                </svg>
+                                Deep Dive
+                            </a>
                 </div>
             </div>
         </div>
@@ -193,6 +203,18 @@
         function sourceManager() {
             return {
                 searchQuery: '',
+                isSystemBusy: false,
+                async init() {
+                    await this.checkStatus();
+                },
+
+                async checkStatus() {
+                    try {
+                        const res = await fetch('/tasks/api/active');
+                        const data = await res.json();
+                        this.isSystemBusy = !!data.active;
+                    } catch (e) { this.isSystemBusy = false; }
+                },
                 matchesSearch(text) {
                     if (!this.searchQuery) return true;
                     return text.toLowerCase().includes(this.searchQuery.toLowerCase());
@@ -201,6 +223,19 @@
         }
         async function handleQuickInit() {
             const count = <%= pendingInitCount %>;
+
+            try {
+                const statusRes = await fetch('/tasks/api/active');
+                const statusData = await statusRes.json();
+                if (statusData.active) {
+                    return Swal.fire({
+                        icon: 'info',
+                        title: 'System Busy',
+                        text: 'Another crawler task is currently running. Please try again after it finishes.',
+                        confirmButtonColor: '#3fc3ee'
+                    });
+                }
+            } catch (e) { console.error("Status check failed", e); }
 
             const { isConfirmed } = await Swal.fire({
                 title: 'Quick Initialize?',
