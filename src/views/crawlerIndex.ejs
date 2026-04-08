@@ -20,7 +20,7 @@
                         class="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none w-64">
                 </div>
                 <div class="flex items-center gap-3 w-full sm:w-auto order-2">
-                    <% /*if (pendingInitCount> 0) {*/ %>
+                    <% if (pendingInitCount> 0) { %>
                         <div x-data="sourceManager()" x-init="init()">
                             <button id="btnQuickInit" @click="handleQuickInit()" :disabled="isSystemBusy" class="inline-flex items-center px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg
                                 hover:bg-amber-600 transition shadow-sm 
@@ -37,7 +37,7 @@
                                     x-text="isSystemBusy ? 'Engine Busy' : 'Quick Init (<%= pendingInitCount %>)'"></span>
                             </button>
                         </div>
-                        <% /*} */%>
+                        <% } %>
 
                             <a href="/crawler/backfill"
                                 class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition shadow-sm">
@@ -132,7 +132,8 @@
                                         <% } %>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                <%= source.lastCrawledAt ? new Date(source.lastCrawledAt).toLocaleString() : 'Never' %>
+                                <%= source.lastCrawledAtDisplay ? new Date(source.lastCrawledAtDisplay).toLocaleString()
+                                    : 'Never' %>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end items-center">

@@ -4,7 +4,7 @@ const Source = require('../models/Source');
 const Task = require('../models/Task');
 const { getActiveTask, runQuickInitTask, handleBackfill } = require('../lib/crawlerService');
 const STRATEGIES = require('../config/strategies');
-const globalConfig = require('../config/global');
+const dateHelper = require('../utils/dateHelper');
 
 // Display mapping for manual excavation mechanisms
 const labels = {
@@ -39,8 +39,7 @@ router.get('/', async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
+        const startOfToday = dateHelper.parse().startOf('day').toDate();
 
         const [allSources, totalSources, activeCount, todayUpdatedCount, uniqueWebsites, pendingInitCount] = await Promise.all([
             Source.find().sort({ siteName: 1, category: 1 }).skip(skip).limit(limit),
@@ -52,8 +51,16 @@ router.get('/', async (req, res) => {
         ]);
         const totalPages = Math.ceil(totalSources / limit);
 
+        const formattedSources = allSources.map(source => {
+            const s = source.toObject();
+            s.lastCrawledAtDisplay = source.lastCrawledAt
+                ? dateHelper.getDateTime(source.lastCrawledAt)
+                : 'Never';
+            return s;
+        });
+
         res.render('crawlerIndex', {
-            sources: allSources,
+            sources: formattedSources,
             totalSources,
             activeCount,
             todayUpdatedCount,
