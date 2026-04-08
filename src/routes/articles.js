@@ -17,35 +17,71 @@ router.get('/', async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        // 1. Get search params from URL
-        const { q, category } = req.query;
+        // Parse sorting parameters (default: newest first)
+        const sortBy = req.query.sortBy || 'originalDate';
+        const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+
+        // Unify search and category filters from query string
+        const searchQuery = req.query.q || '';
+        const category = req.query.category || 'All';
+
+        // --- 2. Query Configuration ---
+        // Construct the sorting object for Mongoose (e.g., { originalDate: -1 })
+        const sortOptions = {};
+        sortOptions[sortBy] = sortOrder;
+
+        // Build the filter object based on user input
         let queryFilter = {};
         if (searchQuery) {
             // Use regex for case-insensitive title search
             queryFilter.title = { $regex: searchQuery, $options: 'i' };
         }
         if (category && category !== 'All') {
-            queryFilter.category = category; // Mongoose matches item in array automatically
+            // Match specific category
+            queryFilter.category = category;
         }
 
-        // 3. Parallel execution (Important: countDocuments must use queryFilter)
-        const [articles, filteredCount, readArticlesCount, todayArticlesCount, allCategories] = await Promise.all([
-            Article.find(queryFilter).sort({ originalDate: -1 }).skip(skip).limit(limit),
-            Article.countDocuments(queryFilter), // Current search result count
+        // Get the timestamp for the start of the current day for statistics
+        const startOfToday = dateHelper.parse().startOf('day').toDate();
+
+        // --- 3. Database Execution (Parallelized) ---
+        // Execute all independent queries concurrently to optimize performance
+        const [
+            articles,
+            filteredCount,
+            readArticlesCount,
+            todayArticlesCount,
+            allCategories
+        ] = await Promise.all([
+            // Primary query: Fetch articles with sort, skip, and limit
+            Article.find(queryFilter).sort(sortOptions).skip(skip).limit(limit),
+            // Count total articles matching the current filter (for pagination)
+            Article.countDocuments(queryFilter),
+            // Global statistic: Total articles marked as read
             Article.countDocuments({ isRead: true }),
-            Article.countDocuments({
-                createdAt: { $gte: new Date().setHours(0, 0, 0, 0) }
-            }),
-            Article.distinct('category') // Still need this for the dropdown list
+            // Global statistic: Articles collected since 00:00 today
+            Article.countDocuments({ createdAt: { $gte: startOfToday } }),
+            // Utility: Get unique categories for the UI dropdown filter
+            Article.distinct('category')
         ]);
+
+        // --- 4. Data Transformation ---
+        const formattedArticles = articles.map(article => {
+            const s = article.toObject();
+            // Format timestamps using helper; fallback to 'Null' if missing
+            s.createdAtDisplay = article.createdAt
+                ? dateHelper.getDateTime(article.createdAt)
+                : 'Null';
+            return s;
+        });
 
         // Calculate total pages based on the filtered results
         const totalPages = Math.ceil(filteredCount / limit);
 
         // --- 5. UI Rendering ---
         res.render('articleList', {
-            articles,
-            totalArticles: filteredCount, // Return filtered total for pagination
+            articles: formattedArticles,
+            totalArticles: filteredCount,
             readCount: readArticlesCount,
             todayCount: todayArticlesCount,
             categoryCount: allCategories.length,
@@ -53,8 +89,13 @@ router.get('/', async (req, res) => {
             currentPage: page,
             totalPages,
             limit,
-            searchQuery: q || '', // Send back to keep input state
-            selectedCategory: category || 'All',
+            searchQuery,
+            sortBy,
+            // Pass original sortOrder string for UI icon toggling
+            sortOrder: req.query.sortOrder || 'desc',
+            // Pre-calculate query string for pagination links to preserve state
+            queryString: `&q=${searchQuery}&category=${category}&sortBy=${sortBy}&sortOrder=${req.query.sortOrder || 'desc'}`,
+            selectedCategory: category,
             title: 'Articles',
             breadcrumbs: [
                 { name: 'Articles', url: '/articles' },
