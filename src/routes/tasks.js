@@ -21,7 +21,6 @@ router.get('/api/active', async (req, res) => {
         const tasks = await Task.find({
             $or: [
                 { status: { $in: ['running', 'pending'] } },
-                { updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }
             ]
         }).sort({ createdAt: -1 }).limit(10);
 
