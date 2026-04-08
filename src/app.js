@@ -4,6 +4,8 @@ const chalk = require('chalk');
 const http = require('http'); // Required to wrap express app for Socket.io
 const connectDB = require('./config/db');
 const socketModule = require('../src/lib/socket');
+const { cleanupStaleTasks, initArticleCronJobs } = require('../src/services/scheduler');
+const mongoose = require('mongoose');
 
 // --- Route Modules ---
 const indexRoutes = require('./routes/index');
@@ -49,6 +51,17 @@ app.use((err, req, res, next) => {
     console.error(chalk.red('System Error:'), err.stack);
     res.status(500).send('Something broke!');
 });
+
+mongoose.connect(process.env.MONGODB_URI)
+    .then(async () => {
+        console.log('✅ MongoDB Connected');
+
+        await cleanupStaleTasks();
+
+        initArticleCronJobs();
+
+        app.listen(3000, () => console.log('🚀 Server running on port 3000'));
+    });
 
 // --- Server Startup ---
 const PORT = process.env.PORT || 3000;
