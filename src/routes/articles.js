@@ -103,7 +103,7 @@ router.get('/', async (req, res) => {
             sortBy,
             // Pass original sortOrder string for UI icon toggling
             sortOrder: req.query.sortOrder || 'desc',
-            selectedStatus, // 確保前端能知道現在選了哪個
+            selectedStatus,
             // Pre-calculate query string for pagination links to preserve state
             queryString: `&q=${searchQuery}&category=${category}&status=${selectedStatus}&sortBy=${sortBy}&sortOrder=${sortOrder}`,
             selectedCategory: category,
@@ -117,6 +117,16 @@ router.get('/', async (req, res) => {
         // Log error and return generic server error status
         console.error('List error:', err);
         res.status(500).send('Server Error');
+    }
+});
+
+router.patch('/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        await Article.findByIdAndUpdate(req.params.id, { status });
+        res.status(200).json({ message: 'Status updated' });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
