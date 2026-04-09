@@ -7,7 +7,7 @@
     const tooltip = document.getElementById('tooltip');
 
     // 1. Get the Markdown text from Express
-    const initialContent = <%- JSON.stringify(initialMarkdown) %>;
+    const initialContent = <%-  JSON.stringify(initialMarkdown) %>;
 
     // 2. Get the Unique ID from Express
     const currentArticleId = <%- JSON.stringify(articleId) %>;
@@ -51,7 +51,7 @@
         }
       },
       cache: {
-        enable: true,
+        // enable: true,
         id: `vditor-${currentArticleId}`,
       },
       toolbarConfig: {
@@ -132,47 +132,163 @@
       }
     });
 
-    // Dictionary logic: listen for mouseup inside Vditor
-    document.getElementById('vditor').addEventListener('mouseup', async (e) => {
-      // Check if the click target is a link or inside a link
-      if (e.target.closest('a')) {
-        return; // Let the browser handle the link click
+    tooltip.addEventListener('mousedown', (e) => e.stopPropagation());
+    tooltip.addEventListener('mouseup', (e) => e.stopPropagation());
+    /**
+     * Converts dictionary translation strings with newlines into HTML format
+     */
+    function formatTranslation(translation) {
+      if (!translation) return '';
+      return translation
+        .trim()
+        .split('\n')
+        .filter(line => line.trim() !== '')
+        .map(line => `<div style="margin-bottom: 2px;">${line}</div>`)
+        .join('');
+    }
+
+    /**
+     * Speech synthesis function
+     */
+    function speak(text) {
+      window.speechSynthesis.cancel(); // Terminate any ongoing speech
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    /**
+     * Automatically expands the selection to full word boundaries
+     * (Includes periods, numbers, and hyphens)
+     */
+    function expandSelectionToWord() {
+      const sel = window.getSelection();
+      if (sel.rangeCount === 0 || sel.isCollapsed) return '';
+
+      let range = sel.getRangeAt(0);
+
+      // Validate that the selection is within text nodes
+      if (range.startContainer.nodeType !== Node.TEXT_NODE ||
+        range.endContainer.nodeType !== Node.TEXT_NODE) {
+        return sel.toString().trim();
       }
-      const selection = window.getSelection().toString().trim();
 
-      // Only search for English words (at least 2 letters)
-      if (selection && /^[a-zA-Z]{2,}$/.test(selection)) {
-        const response = await fetch(`/api/dictionary/${selection}`);
-        const data = await response.json();
+      // Define characters allowed within a word boundary
+      const isNotWordChar = /[^a-zA-Z0-9.-]/;
 
-        if (data.success) {
-          const dict = data.data;
-          const translationHtml = dict.translation
-            .trim()
-            .split('\n')
-            .filter(line => line.trim() !== '')
-            .map(line => `<div style="margin-bottom: 2px;">${line}</div>`)
-            .join('');
-          tooltip.innerHTML = `
-                        <b style="color:#fbbf24; font-size:16px;">${dict.word}</b>
+      // 1. Expand start position backward (Left)
+      while (range.startOffset > 0) {
+        range.setStart(range.startContainer, range.startOffset - 1);
+        if (isNotWordChar.test(range.toString()[0])) {
+          range.setStart(range.startContainer, range.startOffset + 1);
+          break;
+        }
+      }
+
+      // 2. Expand end position forward (Right)
+      while (range.endOffset < range.endContainer.length) {
+        range.setEnd(range.endContainer, range.endOffset + 1);
+        const text = range.toString();
+        if (isNotWordChar.test(text[text.length - 1])) {
+          range.setEnd(range.endContainer, range.endOffset - 1);
+          break;
+        }
+      }
+
+      // 3. Clean up: Shrink selection to exclude leading/trailing symbols
+      let currentText = range.toString();
+
+      while (currentText.length > 0 && isNotWordChar.test(currentText[0])) {
+        range.setStart(range.startContainer, range.startOffset + 1);
+        currentText = range.toString();
+      }
+
+      while (currentText.length > 0 && isNotWordChar.test(currentText[currentText.length - 1])) {
+        range.setEnd(range.endContainer, range.endOffset - 1);
+        currentText = range.toString();
+      }
+
+      // Apply the expanded range to the UI selection
+      sel.removeAllRanges();
+      sel.addRange(range);
+
+      return currentText.trim();
+    }
+
+    /**
+     * Dictionary lookup and TTS logic
+     */
+    document.getElementById('vditor').addEventListener('mouseup', async (e) => {
+      // Ignore clicks on hyperlinks
+      if (e.target.closest('a')) return;
+
+      const selection = expandSelectionToWord();
+
+      // Regex to match valid words or sentences (supporting special chars like ° and smart quotes)
+      const validRegex = /^[a-zA-Z0-9\s\u00A0,.'’":;?!()°/ \-]{2,}$/;
+
+      if (selection && validRegex.test(selection)) {
+        const isSentence = selection.includes(' ');
+
+        // Escape quotes to prevent JavaScript errors in HTML event attributes
+        const safeSelection = selection
+          .replace(/'/g, "\\'")
+          .replace(/’/g, "\\'")
+          .replace(/\n/g, " ");
+
+        if (!isSentence) {
+          // --- Single Word Mode ---
+          try {
+            const response = await fetch(`/api/dictionary/${selection}`);
+            const data = await response.json();
+
+            if (data.success) {
+              const dict = data.data;
+              const translationHtml = formatTranslation(dict.translation);
+
+              tooltip.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <b style="color:#fbbf24; font-size:16px;">${dict.word}</b>
+                            <button onclick="speak('${safeSelection}')" 
+                                    style="background:none; border:none; cursor:pointer; color:#9ca3af; padding:0; font-size:16px;" 
+                                    title="Play pronunciation">🔊</button>
+                        </div>
                         <div style="font-size:12px; color:#9ca3af; margin:5px 0;">Collins: ${dict.collins || 0}★</div>
                         <div style="font-size:13px; line-height:1.4;">${translationHtml}</div>
                     `;
-          tooltip.style.left = e.clientX + 10 + 'px';
-          tooltip.style.top = e.clientY + 10 + 'px';
-          tooltip.style.display = 'block';
+            }
+          } catch (err) {
+            console.error("Dictionary API error:", err);
+          }
+        } else {
+          // --- Sentence Mode ---
+          tooltip.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px; padding: 4px 0;">
+                    <span style="color:#9ca3af; font-size:12px;">Sentence</span>
+                    <button onclick="speak('${safeSelection}')" 
+                            style="background:#fbbf24; border:none; border-radius:4px; color:#1e293b; padding:2px 8px; cursor:pointer; font-size:12px; font-weight:bold;">
+                        🔊 Play Audio
+                    </button>
+                </div>
+            `;
         }
+
+        // Positioning the tooltip near the cursor
+        tooltip.style.left = e.clientX + 15 + 'px';
+        tooltip.style.top = e.clientY + 15 + 'px';
+        tooltip.style.display = 'block';
       }
     });
 
-    // Close tooltip when clicking elsewhere
+    /**
+     * Global click listener to close tooltip
+     */
     document.addEventListener('mousedown', (e) => {
-      // Check if the click target is a link or inside a link
-      if (e.target.closest('a')) {
-        return; // Let the browser handle the link click
-      }
+      if (e.target.closest('a')) return;
       if (!tooltip.contains(e.target)) tooltip.style.display = 'none';
     });
+
   </script>
 
   <%- include('partials/footer.ejs') %>
