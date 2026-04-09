@@ -30,8 +30,17 @@ router.get('/', async (req, res) => {
         const sortOptions = {};
         sortOptions[sortBy] = sortOrder;
 
+        const selectedStatus = req.query.status || 'Active';
+
         // Build the filter object based on user input
         let queryFilter = {};
+
+        if (selectedStatus === 'Active') {
+            queryFilter.status = { $ne: 'archived' };
+        } else if (selectedStatus !== 'All') {
+            queryFilter.status = selectedStatus;
+        }
+
         if (searchQuery) {
             // Use regex for case-insensitive title search
             queryFilter.title = { $regex: searchQuery, $options: 'i' };
@@ -58,7 +67,7 @@ router.get('/', async (req, res) => {
             // Count total articles matching the current filter (for pagination)
             Article.countDocuments(queryFilter),
             // Global statistic: Total articles marked as read
-            Article.countDocuments({ isRead: true }),
+            Article.countDocuments({ status: { $in: ['read', 'archived'] } }),
             // Global statistic: Articles collected since 00:00 today
             Article.countDocuments({ createdAt: { $gte: startOfToday } }),
             // Utility: Get unique categories for the UI dropdown filter
@@ -93,8 +102,9 @@ router.get('/', async (req, res) => {
             sortBy,
             // Pass original sortOrder string for UI icon toggling
             sortOrder: req.query.sortOrder || 'desc',
+            selectedStatus, // 確保前端能知道現在選了哪個
             // Pre-calculate query string for pagination links to preserve state
-            queryString: `&q=${searchQuery}&category=${category}&sortBy=${sortBy}&sortOrder=${req.query.sortOrder || 'desc'}`,
+            queryString: `&q=${searchQuery}&category=${category}&status=${selectedStatus}&sortBy=${sortBy}&sortOrder=${sortOrder}`,
             selectedCategory: category,
             title: 'Articles',
             breadcrumbs: [
