@@ -30,15 +30,16 @@ router.get('/', async (req, res) => {
         const sortOptions = {};
         sortOptions[sortBy] = sortOrder;
 
+        // Default to 'Active' to hide archived articles unless specifically requested
         const selectedStatus = req.query.status || 'Active';
 
         // Build the filter object based on user input
         let queryFilter = {};
 
         if (selectedStatus === 'Active') {
-            queryFilter.status = { $ne: 'archived' };
+            queryFilter.status = { $ne: 'archived' }; // Exclude archived
         } else if (selectedStatus !== 'All') {
-            queryFilter.status = selectedStatus;
+            queryFilter.status = selectedStatus; // Filter by specific status
         }
 
         if (searchQuery) {
@@ -66,7 +67,7 @@ router.get('/', async (req, res) => {
             Article.find(queryFilter).sort(sortOptions).skip(skip).limit(limit),
             // Count total articles matching the current filter (for pagination)
             Article.countDocuments(queryFilter),
-            // Global statistic: Total articles marked as read
+            // Update statistics to use the new status field instead of isRead
             Article.countDocuments({ status: { $in: ['read', 'archived'] } }),
             // Global statistic: Articles collected since 00:00 today
             Article.countDocuments({ createdAt: { $gte: startOfToday } }),
