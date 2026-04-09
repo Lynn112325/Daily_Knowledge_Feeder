@@ -82,14 +82,25 @@
                         Category
                     </th>
 
-                    <th
-                        class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100">
-                        <% currentOrder=(sortBy==='status' && sortOrder==='desc' ) ? 'asc' : 'desc' ;
-                            currentLink=`?page=1&limit=${limit}&q=${searchQuery}&category=${selectedCategory}&sortBy=status&sortOrder=${currentOrder}`;
-                            %>
-                            <a href="<%= currentLink %>" class="flex items-center gap-1 w-full h-full">
-                                Status <%= sortBy==='status' ? (sortOrder==='asc' ? '🔼' : '🔽' ) : '↕️' %>
-                            </a>
+                    <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <div class="flex items-center gap-2">
+                            <span>Status</span>
+                            <select onchange="location.href=this.value"
+                                class="bg-slate-50 border-none text-[10px] font-bold py-0 pl-1 pr-6 rounded focus:ring-0 cursor-pointer text-slate-400 hover:text-slate-600 transition">
+                                <% const statuses=[ { val: 'Active' , label: 'Active' }, { val: 'unread' ,
+                                    label: 'Unread' }, { val: 'reading' , label: 'Reading' }, { val: 'read' ,
+                                    label: 'Read' }, { val: 'later' , label: 'Later' }, { val: 'archived' ,
+                                    label: 'Archived' }, { val: 'All' , label: 'All Status' } ]; statuses.forEach(s=>
+                                    {
+                                    const link =
+                                    `?page=1&limit=${limit}&q=${searchQuery}&category=${selectedCategory}&status=${s.val}&sortBy=${sortBy}&sortOrder=${sortOrder}`;
+                                    %>
+                                    <option value="<%= link %>" <%=selectedStatus===s.val ? 'selected' : '' %>>
+                                        <%= s.label %>
+                                    </option>
+                                    <% }) %>
+                            </select>
+                        </div>
                     </th>
 
                     <th
@@ -203,13 +214,18 @@
                             </td>
 
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <% if (!article.isRead) { %>
+                                <% const statusConfig={ unread: { label: 'New' ,
+                                    css: 'bg-blue-100 text-blue-800 animate-pulse' }, reading: { label: 'Reading' ,
+                                    css: 'bg-amber-100 text-amber-800' }, read: { label: 'Read' ,
+                                    css: 'bg-emerald-100 text-emerald-800' }, archived: { label: 'Archived' ,
+                                    css: 'bg-slate-200 text-slate-600' }, later: { label: 'Later' ,
+                                    css: 'bg-purple-100 text-purple-800' } }; const config=statusConfig[article.status]
+                                    || statusConfig.unread; %>
+
                                     <span
-                                        class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 animate-pulse">New</span>
-                                    <% } else { %>
-                                        <span
-                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500">Read</span>
-                                        <% } %>
+                                        class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <%= config.css %>">
+                                        <%= config.label %>
+                                    </span>
                             </td>
 
                             <td class=" max-w-[50px] px-6 py-4 whitespace-nowrap text-xs text-slate-500">
