@@ -1,11 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task');
+const dateHelper = require('../utils/dateHelper');
 
 router.get('/', async (req, res) => {
-    const tasks = await Task.find().sort({ createdAt: -1 }).limit(10);
+    const allTasks = await Task.find().sort({ createdAt: -1 }).limit(10);
+
+    const formattedTasks = allTasks.map(task => {
+        const t = task.toObject();
+        t.createdAtDisplay = task.createdAt
+            ? dateHelper.getDateTime(task.createdAt)
+            : 'Never';
+        return t;
+    });
+
     res.render('taskLogs', {
-        tasks,
+        tasks: formattedTasks,
         title: 'Execution Logs',
         breadcrumbs: [
             { name: 'Crawler', url: '/crawler' },
