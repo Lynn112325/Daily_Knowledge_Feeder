@@ -20,7 +20,11 @@ const articleSchema = new mongoose.Schema({
     image: { type: String },
 
     createdAt: { type: Date, default: Date.now },
-    isRead: { type: Boolean, default: false }, // User status tracking
+    status: {
+        type: String,
+        enum: ['unread', 'reading', 'read', 'archived', 'later'],
+        default: 'unread'
+    },
     sourceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Source' },
 }, {
     strict: true
