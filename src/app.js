@@ -4,7 +4,7 @@ const chalk = require('chalk');
 const http = require('http'); // Required to wrap express app for Socket.io
 const connectDB = require('./config/db');
 const socketModule = require('../src/lib/socket');
-const { cleanupStaleTasks, initArticleCronJobs } = require('../src/services/scheduler');
+const { cleanupStaleTasks, triggerDailySync } = require('../src/services/scheduler');
 const mongoose = require('mongoose');
 
 // --- Route Modules ---
@@ -58,7 +58,7 @@ mongoose.connect(process.env.MONGODB_URI)
 
         await cleanupStaleTasks();
 
-        initArticleCronJobs();
+        await triggerDailySync();
 
         app.listen(3000, () => console.log('🚀 Server running on port 3000'));
     });
