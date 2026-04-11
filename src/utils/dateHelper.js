@@ -2,10 +2,12 @@ const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
 const config = require('../config/global');
+const relativeTime = require('dayjs/plugin/relativeTime');
 
 // 1. Load required plugins
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.extend(relativeTime);
 
 // 2. Set global default timezone based on system configuration
 dayjs.tz.setDefault(config.TIMEZONE);
@@ -40,6 +42,27 @@ const dateHelper = {
      */
     getDate: (input = null) => {
         return dateHelper.parse(input).format('YYYY-MM-DD');
+    },
+    /**
+     * Returns a human-readable relative time (e.g., "3 days ago").
+     * @param {any} input 
+     * @returns {string}
+     */
+    fromNow: (input) => {
+        if (!input) return 'N/A';
+        return dateHelper.parse(input).fromNow();
+    },
+
+    /**
+     * Calculates days passed since a given date.
+     * @param {any} input 
+     * @returns {number}
+     */
+    daysSince: (input) => {
+        if (!input) return 0;
+        const start = dateHelper.parse(input).startOf('day');
+        const now = dateHelper.parse().startOf('day');
+        return now.diff(start, 'day');
     }
 };
 
