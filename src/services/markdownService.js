@@ -3,7 +3,7 @@ class MarkdownService {
     static MARKER_UUID = 'System boundary, please do not edit or delete!';
 
     // Hidden HTML marker used as a split point
-    static CONTENT_SEPARATOR = `\n<span id="protection-marker" data-info="${this.MARKER_UUID}"></span>\n`;
+    static CONTENT_SEPARATOR = `\n<span id="protection-marker" data-info="${this.MARKER_UUID}"></span>\n\n`;
 
     /**
      * Splits the full markdown into system header (metadata/summary) and user content
