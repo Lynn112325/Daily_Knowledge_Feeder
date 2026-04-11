@@ -142,7 +142,7 @@ router.put('/:id', async (req, res) => {
     } catch (err) {
         res.status(400).json({
             error: 'Save failed',
-            message: err.message === 'PROTECTION_MARKER_DELETED' ? '保護標識遺失' : '保存失敗'
+            message: err.message === 'PROTECTION_MARKER_DELETED' ? 'Protection marker deleted' : 'Invalid content format'
         });
     }
 });
