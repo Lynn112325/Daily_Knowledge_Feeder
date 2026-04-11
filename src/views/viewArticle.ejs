@@ -169,7 +169,7 @@
 
       const startNode = range.startContainer;
       const endNode = range.endContainer;
-      
+
       // Validate that the selection is within text nodes
       if (range.startContainer.nodeType !== Node.TEXT_NODE ||
         range.endContainer.nodeType !== Node.TEXT_NODE) {
@@ -312,31 +312,57 @@
 
     const articleId = currentArticleId;
 
-    async function markAsRead() {
-      try {
-        const response = await fetch(`/articles/${articleId}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'read' })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Done!',
-            text: 'Article marked as read.',
-            toast: true,
-            position: 'top-end',
-            timer: 3000,
-            showConfirmButton: false
+    async function updateStatus() {
+      const { value: newStatus } = await Swal.fire({
+        title: 'Update Article Status',
+        input: 'select',
+        inputOptions: {
+          'unread': 'Unread',
+          'reading': 'Reading',
+          'read': 'Read',
+          'later': 'Read Later',
+          'archived': 'Archived'
+        },
+        inputPlaceholder: 'Select a status',
+        showCancelButton: true,
+        confirmButtonColor: '#6366f1',
+        inputValidator: (value) => {
+          return new Promise((resolve) => {
+            if (value) {
+              resolve();
+            } else {
+              resolve('You need to select a status!');
+            }
           });
-        } else {
-          throw new Error(data.error || 'Failed to update status');
         }
-      } catch (err) {
-        Swal.fire('Error', err.message, 'error');
+      });
+
+      if (newStatus) {
+        try {
+          const response = await fetch(`/articles/${currentArticleId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Status Updated',
+              text: `Article is now marked as ${newStatus}.`,
+              toast: true,
+              position: 'top-end',
+              timer: 3000,
+              showConfirmButton: false
+            });
+          } else {
+            throw new Error(data.error || 'Failed to update status');
+          }
+        } catch (err) {
+          Swal.fire('Error', err.message, 'error');
+        }
       }
     }
 
@@ -370,12 +396,11 @@
 
   </script>
   <div class="fab-container">
-    <div class="fab-item" onclick="markAsRead()" title="Mark as Read">
-      <span class="fab-label">Mark as Read</span>
-      <div class="fab-icon read-icon">
-        <svg viewBox="0 0 1024 1024">
+    <div class="fab-item" onclick="updateStatus()" title="Update Status">
+      <span class="fab-label">Update Status</span>
+      <div class="fab-icon status-icon" style="background: #6366f1;"> <svg viewBox="0 0 1024 1024">
           <path
-            d="M912 190h-69.9c-9.8 0-19.1 4.5-25.1 12.2L404.7 724.5 207 474c-6.1-7.7-15.3-12.2-25.1-12.2H112c-6.7 0-10.4 7.7-6.3 12.9l273.9 347c12.8 16.2 37.4 16.2 50.3 0l488.4-618.9c4.1-5.1 0.4-12.8-6.3-12.8z">
+            d="M912 192H112c-8.8 0-16 7.2-16 16v64c0 8.8 7.2 16 16 16h800c8.8 0 16-7.2 16-16v-64c0-8.8-7.2-16-16-16z m0 256H112c-8.8 0-16 7.2-16 16v64c0 8.8 7.2 16 16 16h800c8.8 0 16-7.2 16-16v-64c0-8.8-7.2-16-16-16z m0 256H112c-8.8 0-16 7.2-16 16v64c0 8.8 7.2 16 16 16h800c8.8 0 16-7.2 16-16v-64c0-8.8-7.2-16-16-16z">
           </path>
         </svg>
       </div>
