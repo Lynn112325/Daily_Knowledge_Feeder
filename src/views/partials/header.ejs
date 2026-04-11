@@ -210,6 +210,25 @@
         .vditor-ir__node[data-type="html-block"]:has(#protection-marker)+.vditor-ir__node {
             margin-top: 0 !important;
         }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            /* slate-200 */
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+            /* slate-300 */
+        }
     </style>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
