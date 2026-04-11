@@ -148,14 +148,45 @@
     }
 
     /**
-     * Speech synthesis function
+     * Speech synthesis using Google Translate TTS
      */
     function speak(text) {
-      window.speechSynthesis.cancel(); // Terminate any ongoing speech
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      window.speechSynthesis.speak(utterance);
+      const maxLength = 200;
+
+      // 1. Check text length and show alert if it exceeds the limit
+      if (text.length > maxLength) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Text too long',
+          text: `Google TTS limit is ${maxLength} characters. Only the first part will be read.`,
+          toast: true,
+          position: 'top-end',
+          timer: 3000,
+          showConfirmButton: false
+        });
+      }
+
+      const safeText = text.substring(0, maxLength);
+
+      // 2. Build Google TTS URL
+      // 'client=tw-ob' is used to bypass API key requirements
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=en&client=tw-ob`;
+
+      // 3. Audio playback logic
+      const audio = new Audio(url);
+      
+      // Stop any currently playing audio
+      if (window.currentAudio) {
+        window.currentAudio.pause();
+        window.currentAudio.currentTime = 0;
+      }
+      
+      window.currentAudio = audio;
+
+      audio.play().catch(err => {
+        console.error("Google TTS playback failed:", err);
+        Swal.fire('Playback Error', 'Could not play audio. Please check your connection.', 'error');
+      });
     }
 
     /**
