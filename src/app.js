@@ -37,7 +37,7 @@ app.set('views', path.join(__dirname, 'views')); // Set the directory for EJS te
 app.set('view engine', 'ejs'); // Set EJS as the template engine
 
 // --- Static Files ---
-app.use(express.static(path.join(__dirname, 'public'))); // Serve static assets (CSS, JS, Images)
+app.use(express.static(path.join(__dirname, '../public'))); // Serve static assets (CSS, JS, Images)
 
 // --- Route Mounting ---
 app.use('/', indexRoutes);             // Dashboard, home, and general navigation
