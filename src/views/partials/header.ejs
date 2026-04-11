@@ -16,6 +16,120 @@
             display: none !important;
         }
 
+        /* Container: fixed to bottom right */
+        .fab-container {
+            position: fixed;
+            bottom: -80px;
+            right: 30px;
+            z-index: 999999;
+            display: flex;
+            /* Reverse vertical stack: last element (main btn) stays at bottom */
+            flex-direction: column-reverse;
+            align-items: center;
+            gap: 12px;
+
+            /* Add transparent padding to catch the mouse */
+            /* This fills the gap between buttons so hover isn't lost */
+            padding: 180px 40px 100px 40px;
+            margin-right: -40px;
+            /* Offset padding so buttons stay at right: 30px */
+            margin-bottom: -85px;
+        }
+
+        /* Common style: circle buttons */
+        .fab-icon,
+        .fab-main {
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Main button (+) style */
+        .fab-main {
+            width: 56px;
+            height: 56px;
+            background: #fbbf24;
+            color: #1e293b;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        /* Sub-button style */
+        .fab-item {
+            display: flex;
+            align-items: center;
+            /* Initial state: move up and scale down */
+            transform: translateY(-80px) scale(0.3);
+            transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Icon part of sub-button */
+        .fab-icon {
+            width: 44px;
+            height: 44px;
+            background: #1e293b;
+            color: white;
+        }
+
+        .fab-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        /* Text label of sub-button */
+        .fab-label {
+            background: rgba(30, 41, 59, 0.9);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-right: 12px;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Interaction: Hover state */
+
+        /* 1. Show all sub-buttons on container hover */
+        .fab-container:hover .fab-item {
+            opacity: 1;
+            /* Jump to target position and scale up */
+            transform: translateY(-180px) scale(1);
+            pointer-events: auto;
+        }
+
+        /* 2. Main button: rotate to X and change color */
+        .fab-container:hover .fab-main {
+            transform: rotate(45deg);
+            background: #ef4444;
+            color: white;
+        }
+
+        /* 3. Staggered animation delay for buttons */
+        .fab-item:first-child {
+            transition-delay: 0.1s;
+        }
+
+        .fab-item:nth-child(2) {
+            transition-delay: 0.05s;
+        }
+
+        /* Color variants */
+        .save-icon {
+            background: #10b981;
+        }
+
+        .read-icon {
+            background: #3b82f6;
+        }
+
         .vditor-reset img {
             max-width: 100%;
             height: auto;
@@ -66,6 +180,35 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             pointer-events: none;
             transition: opacity 0.2s ease;
+        }
+
+        .vditor-ir__preview:has(#protection-marker),
+        .vditor-ir__preview:has([data-info*="System boundary"]) {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+
+        #protection-marker,
+        [data-info*="System boundary"] {
+            display: none !important;
+            position: absolute !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
+
+        .vditor-ir__node[data-type="html-block"]:has(#protection-marker) {
+            display: none !important;
+            position: absolute !important;
+            height: 0 !important;
+            margin: 0 !important;
+        }
+
+        .vditor-ir__node[data-type="html-block"]:has(#protection-marker)+.vditor-ir__node {
+            margin-top: 0 !important;
         }
     </style>
 
