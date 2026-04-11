@@ -120,6 +120,33 @@ router.get('/', async (req, res) => {
     }
 });
 
+router.put('/:id', async (req, res) => {
+    try {
+        const { article } = req.body;
+
+        const { summary, content } = MarkdownService.extractContent(article);
+
+        const updateData = {
+            content: content,
+            updatedAt: Date.now()
+        };
+
+        if (summary !== null) {
+            updateData.summary = summary;
+        } else {
+            console.log("Summary not found in Markdown, skipping summary update.");
+        }
+
+        await Article.findByIdAndUpdate(req.params.id, updateData);
+        res.status(200).json({ message: 'Content saved successfully' });
+    } catch (err) {
+        res.status(400).json({
+            error: 'Save failed',
+            message: err.message === 'PROTECTION_MARKER_DELETED' ? '保護標識遺失' : '保存失敗'
+        });
+    }
+});
+
 router.patch('/:id/status', async (req, res) => {
     try {
         const { status } = req.body;
