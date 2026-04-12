@@ -76,22 +76,23 @@
             async fetchActiveTask() {
                 try {
                     const res = await fetch('/tasks/api/active');
-                    if (res.ok) {
-                        const allTasks = await res.json();
-                        // 4. Identify the first task that is currently in progress
-                        const runningTask = allTasks.find(t => ['running', 'pending'].includes(t.status));
+                    if (!res.ok) throw new Error('Network response was not ok');
 
-                        if (runningTask) {
-                            this.activeTask = runningTask;
-                            this.handleTaskConnection(runningTask._id);
-                        } else {
-                            // 5. Reset state if no active tasks are found
-                            this.activeTask = null;
-                            this.connectedTaskId = null;
-                        }
+                    const data = await res.json();
+
+                    const active = data.active;
+                    const task = data.task;
+
+                    if (active && task && task._id) {
+                        this.activeTask = task;
+                        this.connectedTaskId = `task_${task._id}`;
+                        this.handleTaskConnection(task._id);
+                    } else {
+                        this.activeTask = null;
+                        this.connectedTaskId = null;
                     }
                 } catch (e) {
-                    console.error("Fetch Tasks Failed", e);
+                    console.error("Fetch Tasks Failed:", e.message);
                 }
             },
 
@@ -100,7 +101,6 @@
                 if (this.connectedTaskId === taskId) return;
 
                 this.connectedTaskId = taskId;
-                console.warn(`🔌 Joining task room: ${taskId}`);
                 this.socket.emit('join_task', taskId);
             },
 

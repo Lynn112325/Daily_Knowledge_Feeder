@@ -27,19 +27,17 @@ router.get('/', async (req, res) => {
 // GET /tasks/api/active
 router.get('/api/active', async (req, res) => {
     try {
-        // 1. Fetch recent tasks for the list
-        const tasks = await Task.find({
-            $or: [
-                { status: { $in: ['running', 'pending'] } },
-            ]
-        }).sort({ createdAt: -1 }).limit(10);
+        // 1. Fetch task
+        const task = await Task.findOne({
+            status: { $in: ['running', 'pending'] }
+        }).sort({ createdAt: -1 });
 
         // 2. Determine if the engine is "Busy" (Is there any task currently running/pending?)
-        const isBusy = tasks.some(t => ['running', 'pending'].includes(t.status));
+        const isBusy = !!task;
 
         res.json({
             active: isBusy, // This satisfies the frontend check
-            tasks: tasks    // This provides the list data
+            task: task    // This provides the list data
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
