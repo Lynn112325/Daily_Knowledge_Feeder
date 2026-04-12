@@ -185,7 +185,12 @@
           }
           this.isLoading = true;
           try {
-            const response = await fetch(`/crawler/sources?site=${this.selectedSite}`);
+            const response = await fetch(`/crawler/api/sources/${this.selectedSite}`);
+
+            if (!response.ok) {
+              throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+
             const data = await response.json();
             this.sources = data.sources;
             this.helpText = data.meta.helpText;

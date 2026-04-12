@@ -175,7 +175,7 @@ router.post('/start', async (req, res) => {
     }
 });
 
-// GET /api/sources/:siteName - Fetch categories and UI metadata for a specific site
+// GET /crawler/api/sources/:siteName - Fetch categories and UI metadata for a specific site
 router.get('/api/sources/:siteName', async (req, res) => {
     try {
         const query = { siteName: req.params.siteName, isActive: true };
