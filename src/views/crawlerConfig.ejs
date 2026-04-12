@@ -124,9 +124,8 @@
           </div>
         </div>
 
-        <div class="mt-4" x-data="crawlerManager()" x-init="init()">
-          <button type="button" @click="startCrawl('backfill')"
-            :disabled="selectedIds.length === 0 || isSystemBusy || isLoading"
+        <div class="mt-4" x-init="init()">
+          <button type="button" @click="$nextTick(() => startCrawl('backfill'))" :disabled="isSystemBusy || isLoading"
             class="w-full bg-blue-600 text-white font-bold py-4 rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-lg shadow-md flex justify-center items-center gap-2">
             <template x-if="!isSystemBusy && !isLoading">
               <span>⛏️ Start Backfill Excavation</span>
@@ -212,7 +211,7 @@
         // Trigger the crawling engine (Backfill or Quick Init)
         async startCrawl(mode) {
           // 1. Validation: Ensure categories are selected
-          if (this.selectedIds.length === 0) {
+          if (!Array.isArray(this.selectedIds) || this.selectedIds.length === 0) {
             return Swal.fire({
               icon: 'warning',
               title: 'Selection Required',
