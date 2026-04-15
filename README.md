@@ -134,7 +134,7 @@ Build from the source and install dependencies:
 
 1. **Clone the repository:**
    ```sh
-   ❯ git clone [https://github.com/Lynn112325/Daily_Knowledge_Feeder](https://github.com/Lynn112325/Daily_Knowledge_Feeder)
+   ❯ git clone https://github.com/Lynn112325/Daily_Knowledge_Feeder
    ```
 
 2. **Navigate to the project directory:**
