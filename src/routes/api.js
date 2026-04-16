@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getWordDetails } = require('../lib/dictionaryService');
 const { API_KEY } = require('../config/global');
+const { manualDailySync, getDailySyncStatus } = require('../services/scheduler');
 
 router.get('/dictionary/:word', (req, res) => {
     const word = req.params.word.replace(/[^a-zA-Z]/g, '');
@@ -117,5 +118,38 @@ router.post('/ai-explain', async (req, res) => {
     }
 });
 
+router.post('/daily-sync', async (req, res) => {
+    try {
+        // 1. Optional: Check if sync was already done today to prevent duplicates
+        const dailySyncDone = await getDailySyncStatus();
+        if (!dailySyncDone) {
+            return res.status(400).json({
+                success: false,
+                message: 'System already synchronized for today.'
+            });
+        }
+
+        // 2. Perform the heavy lifting
+        // Using await to ensure the process finishes before responding
+        const results = await manualDailySync();
+
+        // 3. Return success
+        return res.status(200).json({
+            success: true,
+            data: results,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('API Error [Daily Sync]:', error);
+
+        // 4. Return structured error
+        return res.status(500).json({
+            success: false,
+            error: 'Internal Server Error',
+            details: error.message
+        });
+    }
+});
 
 module.exports = router;
