@@ -1,5 +1,3 @@
-<div id="top">
-
 <!-- HEADER STYLE: CLASSIC -->
 <div align="center">
 
@@ -36,6 +34,7 @@
 - [Table of Contents](#table-of-contents)
 - [Overview](#overview)
 - [Features](#key-features)
+- [ScreenShot](#screenshot)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
@@ -90,6 +89,31 @@ Distraction-Free Editing: Deep integration with the Vditor editor, featuring a "
 
 ---
 
+## ScreenShot
+### Dashboard
+<img alt="螢幕擷取畫面 2026-04-16 175047" src="https://github.com/user-attachments/assets/c67b109a-a29a-47dc-9972-a8295550860e" />
+
+### Article List
+<img alt="螢幕擷取畫面 2026-04-16 211614" src="https://github.com/user-attachments/assets/a1ff859f-6c8d-4d6c-852a-901849f20a04" />
+
+### Source List
+<img alt="螢幕擷取畫面 2026-04-16 212638" src="https://github.com/user-attachments/assets/c2743859-38ee-483c-a757-611b2b4780b4" />
+
+### Manual Deep Dive
+<img alt="螢幕擷取畫面 2026-04-16 212656" src="https://github.com/user-attachments/assets/5a91c43f-a891-424a-8bf6-63fca30cb2ad" />
+
+### Task Log
+<img alt="螢幕擷取畫面 2026-04-12 181434" src="https://github.com/user-attachments/assets/d6449675-8129-4ec6-b0cd-e321158b6cf7" />
+
+### Article
+<img alt="螢幕擷取畫面 2026-04-16 212037" src="https://github.com/user-attachments/assets/2e853677-b7bf-430b-8fc8-db447233b18c" />
+<img alt="螢幕擷取畫面 2026-04-16 212050" src="https://github.com/user-attachments/assets/e2c24f47-c6e3-45fb-810d-7c9d195a70f2" />
+<img alt="螢幕擷取畫面 2026-04-16 212408" src="https://github.com/user-attachments/assets/0f9fdd9f-f9cc-48a3-86dd-3bbff4ff5ec7" />
+<img alt="螢幕擷取畫面 2026-04-16 212808" src="https://github.com/user-attachments/assets/c8698507-fef8-44f2-8f65-f97357abc0de" />
+<img alt="螢幕擷取畫面 2026-04-16 213010" src="https://github.com/user-attachments/assets/33691e4e-4b15-4dc1-91fe-ab63afef59da" />
+<img alt="螢幕擷取畫面 2026-04-16 212023" src="https://github.com/user-attachments/assets/59ca506b-d4ff-4ec3-806c-b9320efc6cff" />
+
+---
 ## Project Structure
 
 ```sh
