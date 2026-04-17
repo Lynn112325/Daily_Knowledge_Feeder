@@ -10,10 +10,21 @@ router.get('/dictionary/:word', (req, res) => {
     res.json(details ? { success: true, data: details } : { success: false });
 });
 
+/**
+ * Helper: Delay execution for a given time
+ * @param { number } ms - Milliseconds to sleep
+ */
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 router.post('/ai-explain', async (req, res) => {
     const { text, context } = req.body;
-    if (!text) return res.status(400).json({ success: false, message: 'No text provided' });
 
+    // Validate input
+    if (!text) {
+        return res.status(400).json({ success: false, message: 'No text provided' });
+    }
+
+    // 1. Separate large system prompt for cleaner logic
     const systemPrompt = `You are a top-tier Bilingual Linguist, Journalistic Editor, and English Teacher.
                 Your task is to analyze the text inside <Target> based on the background <Context>.
                 Showcase the true advantage of AI: providing deep contextual insights, natural phrasing, and explaining the "WHY" behind the language.
@@ -54,67 +65,122 @@ router.post('/ai-explain', async (req, res) => {
                     "extension": "<For words: Explain the contextual meaning and provide 2+ practical English examples with Chinese explanations. For sentences: Provide 1 related English keyword or phrase with a Chinese explanation.>",
         }`;
 
+    // 2. API Endpoint configuration (Using Gemini)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`;
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                system_instruction: {
-                    parts: [{ text: systemPrompt }]
-                },
-                contents: [
-                    {
-                        role: 'user',
-                        parts: [{ text: `Context: ${context}\nTarget: ${text}` }]
-                    }
-                ],
-                generationConfig: {
-                    temperature: 0.2,
-                    maxOutputTokens: 2048,
-                    responseMimeType: "application/json"
-                }
-            })
-        });
 
-        const result = await response.json();
+    // 3. Retry Strategy Configuration
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
 
-        if (result.error) {
-            throw new Error(`Google API Error: ${result.error.message}`);
-        }
-
-        // 1. Check for valid candidates (Handle Safety Filters)
-        if (!result.candidates || result.candidates.length === 0) {
-            console.warn("Gemini Warning: No candidates returned (likely safety filtered).");
-            return res.status(200).json({
-                success: false,
-                message: 'Response blocked by safety filters. Please try a different selection.'
-            });
-        }
-
-        const candidate = result.candidates[0];
-
-        // 2. 🛡️ Handle Token Limit Truncation
-        if (candidate.finishReason === 'MAX_TOKENS') {
-            console.error("Gemini Error: Output truncated due to MAX_TOKENS limit.");
-            return res.status(500).json({
-                success: false,
-                message: 'Analysis is too long and was truncated. Please try a shorter selection.'
-            });
-        }
-
-        // 3. Extract and Parse
+    // Execute logic within a retry loop to handle transient failures
+    while (retryCount <= MAX_RETRIES) {
         try {
-            const rawText = candidate.content.parts[0].text;
-            const aiData = JSON.parse(rawText);
-            res.json({ success: true, data: aiData });
-        } catch (parseError) {
-            console.error("JSON Parse Error:", parseError, "Raw Text:", candidate.content.parts[0].text);
-            res.status(500).json({ success: false, message: 'Failed to parse AI response.' });
+            // Setup request timeout (20 seconds)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    system_instruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: `Context: ${context}\nTarget: ${text}` }] }],
+                    generationConfig: {
+                        temperature: 0.2,
+                        maxOutputTokens: 2048,
+                        responseMimeType: "application/json"
+                    }
+                })
+            });
+
+            clearTimeout(timeoutId);
+            const result = await response.json();
+
+            // 4. Handle API Errors
+            if (result.error) {
+                const errMsg = result.error.message;
+
+                // Scenario A: Regional Restriction (CRITICAL)
+                // Google often returns this when the IP is from Hong Kong or mainland China.
+                if (errMsg.includes('location is not supported')) {
+                    console.error("Critical: Regional restriction detected.");
+                    // Return 403 immediately, do not retry.
+                    return res.status(403).json({
+                        success: false,
+                        message: "Google API does not support your server's current location (Region Restricted).\n If you are in HK/China, please use a VPN/Proxy."
+                    });
+                }
+
+                // Scenario B: Transient Service Overload
+                const isHighDemand = response.status === 503 || errMsg.includes('high demand');
+                if (isHighDemand && retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    const delay = Math.pow(2, retryCount) * 1000;
+                    console.warn(`Gemini Busy. Retrying in ${delay}ms...`);
+                    await sleep(delay);
+                    continue;
+                }
+
+                // Scenario C: Other API errors (e.g., Invalid Key)
+                // We throw this so it gets caught by the catch block below
+                throw new Error(errMsg);
+            }
+
+            // 5. Validate Candidate Output
+            if (!result.candidates || result.candidates.length === 0) {
+                console.warn("Gemini Warning: Safety filter blocked the response.");
+                return res.status(200).json({
+                    success: false,
+                    message: 'Response blocked by safety filters. Please try a different selection.'
+                });
+            }
+
+            const candidate = result.candidates[0];
+
+            // Handle output truncation due to token limits
+            if (candidate.finishReason === 'MAX_TOKENS') {
+                console.error("Gemini Error: Output truncated by maxOutputTokens.");
+                return res.status(500).json({
+                    success: false,
+                    message: 'Analysis is too long. Please try a shorter selection.'
+                });
+            }
+
+            // 6. Final Data Extraction and Parsing
+            try {
+                const rawText = candidate.content.parts[0].text;
+                const aiData = JSON.parse(rawText);
+                return res.json({ success: true, data: aiData });
+            } catch (parseError) {
+                console.error("JSON Parse Error:", parseError, "Raw Text:", candidate.content.parts[0].text);
+                return res.status(500).json({ success: false, message: 'Failed to parse AI response schema.' });
+            }
+
+        } catch (error) {
+            // Handle Request Timeout
+            if (error.name === 'AbortError') {
+                return res.status(504).json({ success: false, message: 'AI Engine timeout (20s).' });
+            }
+
+            // Determine if we should retry or fail
+            const recoverable = error.message.includes('high demand') || error.message.includes('fetch failed');
+
+            if (retryCount >= MAX_RETRIES || !recoverable) {
+                console.error("Gemini API Final Failure:", error.message);
+
+                // 🔥 FIX: Return the ACTUAL error message to the user instead of a generic one.
+                return res.status(500).json({
+                    success: false,
+                    message: `AI Engine Error: ${error.message}`,
+                    suggestion: error.message.includes('location') ? "Please check your server's regional IP." : "Try again later."
+                });
+            }
+
+            // Retry logic for recoverable errors
+            retryCount++;
+            await sleep(1000);
         }
-    } catch (error) {
-        console.error("Gemini API Error:", error);
-        res.status(500).json({ success: false, message: 'AI Engine error.' });
     }
 });
 

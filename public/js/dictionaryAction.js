@@ -162,13 +162,19 @@
         },
         // Request deep analysis from LLM backend
         getAIExplain: async (text, context) => {
-            const res = await fetch('/api/ai-explain', {
+            const response = await fetch('/api/ai-explain', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text, context })
             });
-            if (!res.ok) throw new Error('Network response was not ok');
-            return await res.json();
+
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.message || 'Server returned an error');
+            }
+
+            return result;
         }
     };
 
@@ -293,10 +299,12 @@
                     heightAuto: false,
                 });
             } else {
+                console.error("AI Explain API Error:", result.message);
                 throw new Error(result.message);
             }
         } catch (error) {
-            Swal.fire({ icon: 'error', title: 'Analysis Failed', text: error.message || 'Make sure Ollama is running.', heightAuto: false, });
+            console.error("AI Explain Request Failed:", error);
+            Swal.fire({ icon: 'error', title: 'Analysis Failed', text: error.message || 'An unexpected error occurred.', heightAuto: false, });
         }
     };
 
