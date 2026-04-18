@@ -88,12 +88,14 @@ async function getList(listUrl, config, userAgent) {
 
     } catch (error) {
         // Handle server-side (4xx/5xx) or general network errors
+        let errorMsg = error.message;
         if (error.response) {
-            await logToUI(chalk.red(`❌ Server Error [${error.response.status}] at ${listUrl}`));
-        } else {
-            await logToUI(chalk.red(`❌ Network Error: ${error.message}`));
+            errorMsg = `Server Error [${error.response.status}]`;
         }
-        return [];
+
+        await logToUI(chalk.red(`❌ getList Error: ${errorMsg} at ${listUrl}`));
+
+        throw new Error(`Failed to fetch list: ${errorMsg}`);
     }
 }
 
