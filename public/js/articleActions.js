@@ -52,6 +52,56 @@ async function updateStatus(currentArticleId) {
     }
 }
 
+// Listen for all click events on the document
+document.addEventListener('click', async (e) => {
+    // Find the closest anchor (<a>) tag from the clicked element
+    const link = e.target.closest('a');
+
+    // Skip if: 
+    // 1. No link was clicked
+    // 2. Link opens in a new tab (_blank)
+    // 3. Link is a javascript action (e.g., javascript:void(0))
+    if (!link || link.target === '_blank' || link.href.includes('javascript:')) return;
+
+    const destination = link.href;
+
+    // Skip if the link is just an anchor/hash jump on the same page
+    if (destination.startsWith(window.location.origin + window.location.pathname + '#')) return;
+
+    // Prevent the default browser navigation
+    e.preventDefault();
+
+    // Show a confirmation dialog using SweetAlert2
+    const result = await Swal.fire({
+        title: 'Save changes?',
+        text: 'You are leaving this page. Do you want to sync your changes to the database first?',
+        icon: 'question',
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Save & Exit',
+        denyButtonText: 'Exit without saving',
+        cancelButtonText: 'Stay here',
+        confirmButtonColor: '#3085d6',
+        denyButtonColor: '#d33',
+    });
+
+    // Handle user choices
+    if (result.isConfirmed) {
+        // User clicked "Save & Exit"
+        const currentContent = vditor.getValue();
+        try {
+            await saveToDB(currentContent); // Wait for the database sync
+            window.location.href = destination; // Navigate after success
+        } catch (err) {
+            console.error("Navigation halted due to save error.");
+        }
+    } else if (result.isDenied) {
+        // User clicked "Exit without saving"
+        window.location.href = destination; // Navigate immediately
+    }
+    // If user clicked "Stay here" (Cancel), do nothing and remain on the page
+});
+
 async function saveToDB(article) {
     if (!article) {
         return Swal.fire('Wait!', 'Content is empty.', 'warning');
