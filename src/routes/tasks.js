@@ -58,7 +58,7 @@ router.post('/api/stop/:id', async (req, res) => {
         // 2. Set status to 'stopped'; the background engine checks this flag to exit loops
         await Task.findByIdAndUpdate(taskId, {
             status: 'stopped',
-            errorLog: 'Manually stopped by user.',
+            errorLogs: 'Manually stopped by user.',
             completedAt: new Date()
         });
 

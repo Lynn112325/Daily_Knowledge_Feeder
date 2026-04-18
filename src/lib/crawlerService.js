@@ -285,7 +285,7 @@ async function handleIncremental(sourceIds, taskId) {
                 console.log(chalk.red(`🛑 Engine blocked: Another task ${runningTask._id} is active.`));
                 await Task.findByIdAndUpdate(taskId, {
                     status: 'failed',
-                    errorLog: ['Engine busy: Parallel execution prevented.']
+                    errorLogs: ['Engine busy: Parallel execution prevented.']
                 });
                 return;
             }
@@ -365,7 +365,7 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
                 console.log(chalk.red(`🛑 Engine blocked: Another task ${runningTask._id} is active.`));
                 await Task.findByIdAndUpdate(taskId, {
                     status: 'failed',
-                    errorLog: ['Engine busy: Parallel execution prevented.']
+                    errorLogs: ['Engine busy: Parallel execution prevented.']
                 });
                 return;
             }
@@ -383,7 +383,7 @@ async function handleBackfill(sourceIds, depthLimit, taskId) {
                     await logToUI(chalk.bgRed.white(errMsg));
 
                     await Task.findByIdAndUpdate(taskId, {
-                        $push: { errorLog: errMsg }
+                        $push: { errorLogs: errMsg }
                     });
 
                     stats.failCount++;

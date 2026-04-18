@@ -26,7 +26,13 @@ async function logToUI(message = "") {
 
         // 4. Save persistence logs to Database for critical nodes
         // Only saves key status indicators to avoid bloating DB
-        if (message.includes('✅') || message.includes('📍') || message.includes('❌')) {
+        if (message.includes('❌')) {
+            await Task.findByIdAndUpdate(taskId, {
+                $push: {
+                    errorLogs: { $each: [message], $slice: -200 } // Keep only the last 200 logs
+                }
+            });
+        } else {
             await Task.findByIdAndUpdate(taskId, {
                 $push: {
                     logs: { $each: [message], $slice: -200 } // Keep only the last 200 logs

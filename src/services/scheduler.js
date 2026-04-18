@@ -120,7 +120,7 @@ async function cleanupStaleTasks() {
         { status: 'running' },
         {
             status: 'failed',
-            errorLog: ['Task interrupted by server restart/crash.'],
+            errorLogs: ['Task interrupted by server restart/crash.'],
             completedAt: new Date()
         }
     );
