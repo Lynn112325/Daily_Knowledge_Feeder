@@ -46,7 +46,7 @@
 
 ## Overview
 
-Daily Knowledge Feeder is an automated information ingestion and processing system built on Node.js. It transcends the role of a simple web scraper by integrating authoritative content sourcing with advanced linguistic augmentation, providing a one-stop solution for high-quality knowledge acquisition.
+Daily Knowledge Feeder is an automated information ingestion and processing system built on Node.js. It integrating authoritative content sourcing with advanced linguistic augmentation, providing a one-stop solution for high-quality knowledge acquisition.
 
 **Why KnowledgeFeederBot?**
 In an era of information explosion, we are often overwhelmed by low-quality content while professional literature remains inaccessible due to language barriers. I developed this system to achieve:
