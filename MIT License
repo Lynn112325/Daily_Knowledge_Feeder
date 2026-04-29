@@ -21,4 +21,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Third-Party Data Notice:
-This repository contains dictionary data from the ECDICT project (https://github.com/skywind3000/ECDICT), which is licensed under the MIT License. Copyright (c) 2017 skywind3000.
+ECDICT
+This repository contains dictionary data from the ECDICT project (https://github.com/skywind3000/ECDICT), which is licensed under the MIT License.
+Copyright (c) 2017 skywind3000.
+
+B3log
+This project incorporates software from B3log (https://b3log.org), licensed under the MIT License.
+Copyright (c) 2019-present B3log 开源, b3log.org.
