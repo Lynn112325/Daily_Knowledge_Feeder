@@ -202,6 +202,7 @@ Run the project with:
 ## Acknowledgments
 
 - Credits
+  
 ECDICT: This project leverages the Free English to Chinese Dictionary Database developed by skywind3000. The extensive SQLite database provided by ECDICT is the backbone of our vocabulary filtering system, allowing for high-performance, offline linguistic analysis and difficulty categorization.
 
 Vditor / B3log: This project utilizes the open-source editor components provided by B3log. Their robust Markdown editor ecosystem contributes significantly to the content creation and preview experience within this tool.
